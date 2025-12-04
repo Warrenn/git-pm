@@ -143,7 +143,16 @@ class GitPM:
                     return yaml.safe_load(f)
                 else:
                     # Try JSON as fallback
-                    return json.load(f)
+                    print("Note: PyYAML not installed. Trying to parse as JSON...")
+                    print("      For better YAML support: pip install PyYAML")
+                    try:
+                        return json.load(f)
+                    except json.JSONDecodeError as je:
+                        print("")
+                        print("Error: File appears to be YAML, not JSON")
+                        print("       Please install PyYAML: pip install PyYAML")
+                        print("       Or convert your file to JSON format")
+                        return None
         except Exception as e:
             print("Warning: Failed to load {}: {}".format(filepath, e))
             return None
@@ -208,6 +217,16 @@ class GitPM:
         """Resolve canonical repo identifier to actual git URL"""
         # Handle file:// URLs directly (for testing)
         if canonical_repo.startswith("file://"):
+            # Convert relative file:// paths to absolute paths
+            # This is important because git operations run from different working directories
+            file_path = canonical_repo[7:]  # Remove 'file://' prefix
+            
+            # If it's a relative path, convert to absolute
+            if not file_path.startswith('/'):
+                # Get absolute path relative to project root
+                abs_path = (self.project_root / file_path).resolve()
+                return "file://{}".format(abs_path)
+            
             return canonical_repo
         
         domain = canonical_repo.split("/")[0]
@@ -354,7 +373,8 @@ class GitPM:
             return commit_sha
             
         except subprocess.CalledProcessError as e:
-            print("    ✗ Failed to clone: {}".format(e))
+            error_msg = e.stderr.decode() if e.stderr else str(e)
+            print("    ✗ Failed to clone: {}".format(error_msg.strip() if error_msg else e))
             # Clean up failed cache
             if cache_path.exists():
                 shutil.rmtree(cache_path)
