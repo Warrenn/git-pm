@@ -97,13 +97,24 @@ jobs:
       
       - name: Check documentation files exist
         run: |
-          test -f README.md
-          test -f QUICKSTART.md
-          test -f DOCUMENTATION.md
-          test -f REFERENCE.md
-          test -f examples/git-pm.yaml
-          test -f examples/git-pm.local.yaml
-          echo "✓ All documentation files present"
+          echo "Checking documentation files..."
+          EXIT_CODE=0
+          
+          for file in README.md QUICKSTART.md DOCUMENTATION.md REFERENCE.md examples/git-pm.yaml examples/git-pm.local.yaml; do
+            if [ -f "$file" ]; then
+              echo "✓ $file"
+            else
+              echo "✗ MISSING: $file"
+              EXIT_CODE=1
+            fi
+          done
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✓ All documentation files present"
+          else
+            echo "✗ Some files are missing"
+            exit 1
+          fi
       
       - name: Validate YAML examples
         run: |
