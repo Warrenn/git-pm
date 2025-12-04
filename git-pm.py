@@ -92,7 +92,29 @@ class GitPM:
     
     def load_config(self):
         """Load and merge configuration from multiple sources"""
-        config = {}
+        # 0. Load default config from file next to git-pm.py
+        script_dir = Path(__file__).parent.resolve()
+        default_config_file = script_dir / "git-pm.default.yaml"
+        
+        if default_config_file.exists():
+            config = self._load_yaml_file(default_config_file)
+            if not config:
+                config = {}
+        else:
+            # Fallback to hardcoded defaults if file doesn't exist
+            config = {
+                "packages_dir": ".git-packages",
+                "cache_dir": str(self.user_cache_dir),
+                "auto_update_branches": True,
+                "parallel_downloads": 1,
+                "git_protocol": {
+                    "github.com": "ssh",
+                    "gitlab.com": "ssh",
+                    "dev.azure.com": "ssh"
+                },
+                "url_patterns": {},
+                "credentials": {}
+            }
         
         # 1. Load user-level config
         user_config_file = self.user_config_dir / "config.yaml"
@@ -110,17 +132,9 @@ class GitPM:
                 config = self._merge_dicts(config, project_config)
                 print("  Loaded project config: {}".format(project_config_file))
         
-        # 3. Apply defaults
-        defaults = {
-            "packages_dir": ".git-packages",
-            "cache_dir": str(self.user_cache_dir),
-            "auto_update_branches": True,
-            "parallel_downloads": 4,
-            "git_protocol": {},
-            "url_patterns": {},
-            "credentials": {}
-        }
-        config = self._merge_dicts(defaults, config)
+        # Ensure cache_dir is expanded (handle ~)
+        if "cache_dir" in config and isinstance(config["cache_dir"], str):
+            config["cache_dir"] = str(Path(config["cache_dir"]).expanduser())
         
         self.config = config
         return config
@@ -259,6 +273,15 @@ class GitPM:
         if protocol == "ssh" or self._can_use_ssh(domain):
             if "github.com" in domain or "gitlab.com" in domain:
                 return "git@{}:{}.git".format(domain, path)
+            elif "dev.azure.com" in domain:
+                # Azure DevOps SSH format: git@ssh.dev.azure.com:v3/organization/project/repo
+                return "git@ssh.dev.azure.com:v3/{}".format(path)
+            elif "visualstudio.com" in domain:
+                # Legacy Azure DevOps format
+                parts = path.split("/")
+                if len(parts) >= 2:
+                    org = parts[0]
+                    return "git@vs-ssh.visualstudio.com:v3/{}/{}".format(org, "/".join(parts[1:]))
         
         # Fallback to HTTPS
         return "https://{}/{}.git".format(domain, path)
@@ -380,16 +403,14 @@ class GitPM:
                 shutil.rmtree(cache_path)
             return None
     
-    def create_symlink(self, source, target):
-        """Create symlink or junction, cross-platform"""
+    def copy_directory(self, source, target):
+        """Copy directory contents from source to target"""
         target = Path(target)
         source = Path(source).resolve()
         
-        # Remove existing link/directory
-        if target.exists() or target.is_symlink():
-            if target.is_symlink():
-                target.unlink()
-            elif target.is_dir():
+        # Remove existing directory
+        if target.exists():
+            if target.is_dir():
                 shutil.rmtree(target)
             else:
                 target.unlink()
@@ -397,33 +418,11 @@ class GitPM:
         target.parent.mkdir(parents=True, exist_ok=True)
         
         try:
-            if self.system == "Windows":
-                # Try symlink first, fall back to junction
-                try:
-                    if source.is_dir():
-                        os.symlink(source, target, target_is_directory=True)
-                    else:
-                        os.symlink(source, target)
-                    print("    ✓ Symlink: {} -> {}".format(target.name, source))
-                except OSError:
-                    # Fall back to junction for directories on Windows
-                    if source.is_dir():
-                        subprocess.run(
-                            ["mklink", "/J", str(target), str(source)],
-                            shell=True,
-                            check=True,
-                            capture_output=True
-                        )
-                        print("    ✓ Junction: {} -> {}".format(target.name, source))
-                    else:
-                        raise
-            else:
-                # Linux/macOS
-                os.symlink(source, target)
-                print("    ✓ Symlink: {} -> {}".format(target.name, source))
+            shutil.copytree(source, target, symlinks=False, dirs_exist_ok=True)
+            print("    ✓ Copied: {} -> {}".format(source, target.name))
             return True
         except Exception as e:
-            print("    ✗ Failed to create link: {}".format(e))
+            print("    ✗ Failed to copy: {}".format(e))
             return False
     
     def install_package(self, pkg_name, pkg_config):
@@ -441,7 +440,7 @@ class GitPM:
             packages_dir = self.project_root / self.config["packages_dir"]
             target = packages_dir / pkg_name
             
-            self.create_symlink(local_path, target)
+            self.copy_directory(local_path, target)
             
             return {
                 "type": "local",
@@ -503,7 +502,7 @@ class GitPM:
             except:
                 commit_sha = "unknown"
         
-        # Create symlink to package
+        # Copy package to packages directory
         packages_dir = self.project_root / self.config["packages_dir"]
         target = packages_dir / pkg_name
         source = cache_path / path
@@ -512,7 +511,7 @@ class GitPM:
             print("  ✗ Path '{}' not found in repository".format(path))
             return None
         
-        self.create_symlink(source, target)
+        self.copy_directory(source, target)
         
         return {
             "repo": repo,
@@ -647,6 +646,67 @@ class GitPM:
         
         return 0
     
+    def cmd_add(self, args):
+        """Add command - add or update a package in the manifest"""
+        print("📦 git-pm add")
+        print("")
+        
+        self.load_config()
+        
+        # Get package name
+        pkg_name = args.name
+        
+        # Build package configuration
+        pkg_config = {
+            "repo": args.repo,
+            "path": args.path if args.path else "",
+            "ref": {
+                "type": args.ref_type if args.ref_type else "branch",
+                "value": args.ref_value if args.ref_value else "main"
+            }
+        }
+        
+        # Check if manifest exists
+        manifest_file = self.project_root / "git-pm.yaml"
+        
+        if manifest_file.exists():
+            print("Loading existing manifest...")
+            manifest = self._load_yaml_file(manifest_file)
+            if not manifest:
+                manifest = {"packages": {}}
+        else:
+            print("Creating new manifest...")
+            manifest = {"packages": {}}
+        
+        # Add or update package
+        if "packages" not in manifest:
+            manifest["packages"] = {}
+        
+        if pkg_name in manifest["packages"]:
+            print("Updating existing package: {}".format(pkg_name))
+        else:
+            print("Adding new package: {}".format(pkg_name))
+        
+        manifest["packages"][pkg_name] = pkg_config
+        
+        # Save manifest
+        print("")
+        print("Saving manifest to git-pm.yaml...")
+        self._save_yaml_file(manifest_file, manifest)
+        
+        print("")
+        print("✓ Package '{}' added to manifest".format(pkg_name))
+        print("")
+        print("Package configuration:")
+        print("  Name: {}".format(pkg_name))
+        print("  Repo: {}".format(pkg_config["repo"]))
+        print("  Path: {}".format(pkg_config["path"] if pkg_config["path"] else "(root)"))
+        print("  Ref:  {}:{}".format(pkg_config["ref"]["type"], pkg_config["ref"]["value"]))
+        print("")
+        print("Run 'python git-pm.py install' to install the package")
+        
+        return 0
+    
     def cmd_list(self, args):
         """List command - show installed packages"""
         print("📋 git-pm list")
@@ -736,6 +796,37 @@ def main():
         help="List installed packages"
     )
     
+    # Add command
+    add_parser = subparsers.add_parser(
+        "add",
+        help="Add or update a package in the manifest",
+        description="Add a new package to git-pm.yaml or update an existing package"
+    )
+    add_parser.add_argument(
+        "name",
+        help="Package name (how it will be referenced in your code)"
+    )
+    add_parser.add_argument(
+        "repo",
+        help="Repository identifier (e.g., github.com/owner/repo, dev.azure.com/org/project/_git/repo)"
+    )
+    add_parser.add_argument(
+        "--path",
+        default="",
+        help="Path within repository to the package (default: repository root)"
+    )
+    add_parser.add_argument(
+        "--ref-type",
+        choices=["tag", "branch", "commit"],
+        default="branch",
+        help="Reference type (default: branch)"
+    )
+    add_parser.add_argument(
+        "--ref-value",
+        default="main",
+        help="Reference value - tag name, branch name, or commit SHA (default: main)"
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -754,6 +845,8 @@ def main():
         return gpm.cmd_clean(args)
     elif args.command == "list":
         return gpm.cmd_list(args)
+    elif args.command == "add":
+        return gpm.cmd_add(args)
     
     return 0
 

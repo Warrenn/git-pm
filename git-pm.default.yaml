@@ -1,0 +1,31 @@
+# git-pm.default.yaml
+# Default configuration for git-pm
+# This file is located next to git-pm.py and provides defaults
+# Users can override these in ~/.git-pm/config.yaml or .git-pm/config.yaml
+
+# Where to store the global cache (can use ~ for home directory)
+cache_dir: ~/.cache/git-pm
+
+# Default packages directory name
+packages_dir: .git-packages
+
+# Automatically update branches to latest when running install
+auto_update_branches: true
+
+# Preferred git protocol per domain
+# Options: "ssh" or "https"
+git_protocol:
+  github.com: ssh
+  gitlab.com: ssh
+  dev.azure.com: ssh  # Azure DevOps now defaults to SSH
+
+# Custom URL patterns (optional)
+# Use {path} placeholder for the repository path
+url_patterns: {}
+
+# Credentials (optional)
+# Use environment variables like ${GITHUB_TOKEN}
+credentials: {}
+
+# Performance settings
+parallel_downloads: 1
