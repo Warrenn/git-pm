@@ -1,0 +1,44 @@
+# git-pm.yaml
+# Main manifest file for git-pm package manager
+# This file should be committed to your repository
+
+packages:
+  # Example 1: Package from a tag (immutable, recommended for production)
+  utils:
+    repo: github.com/company/monorepo
+    path: packages/utils
+    ref:
+      type: tag
+      value: v1.2.0
+  
+  # Example 2: Package from a branch (mutable, auto-updates on install)
+  data-models:
+    repo: github.com/company/monorepo
+    path: packages/data-models
+    ref:
+      type: branch
+      value: main
+  
+  # Example 3: Package from a specific commit (immutable, pinned)
+  legacy-lib:
+    repo: github.com/company/legacy-repo
+    path: src/lib
+    ref:
+      type: commit
+      value: abc123def456789012345678901234567890abcd
+  
+  # Example 4: Package from GitLab
+  ui-components:
+    repo: gitlab.com/team/design-system
+    path: components
+    ref:
+      type: tag
+      value: v2.5.1
+  
+  # Example 5: Package from Azure DevOps
+  shared-config:
+    repo: dev.azure.com/organization/project/_git/config-repo
+    path: shared/config
+    ref:
+      type: branch
+      value: production
