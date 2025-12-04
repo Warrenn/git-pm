@@ -549,7 +549,7 @@ class GitPM:
         # Install packages
         lockfile_data = {
             "version": "1",
-            "generated_at": datetime.datetime.now(datetime.UTC),
+            "generated_at": datetime.utcnow().isoformat(),
             "packages": {}
         }
         
