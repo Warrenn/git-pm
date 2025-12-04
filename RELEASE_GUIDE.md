@@ -30,7 +30,7 @@ The workflow will automatically:
 
 **Done!** Your release will be available at:
 ```
-https://github.com/YOUR_USERNAME/YOUR_REPO/releases
+https://github.com/Warrenn/git-pm/releases
 ```
 
 ## Tag Format
@@ -63,21 +63,21 @@ After pushing the tag:
 
 1. Check workflow status:
    ```
-   https://github.com/YOUR_USERNAME/YOUR_REPO/actions
+   https://github.com/Warrenn/git-pm/actions
    ```
 
 2. View your release:
    ```
-   https://github.com/YOUR_USERNAME/YOUR_REPO/releases
+   https://github.com/Warrenn/git-pm/releases
    ```
 
 3. Download and test:
    ```bash
    # One-liner: Download, extract to git-pm folder, and cleanup
-   curl -L -o git-pm-0.0.1.tar.gz https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/v0.0.1/git-pm-0.0.1.tar.gz && mkdir -p git-pm && tar -xzf git-pm-0.0.1.tar.gz -C git-pm --strip-components=1 && rm git-pm-0.0.1.tar.gz
+   curl -L -o git-pm-0.0.1.tar.gz https://github.com/Warrenn/git-pm/releases/download/v0.0.1/git-pm-0.0.1.tar.gz && mkdir -p git-pm && tar -xzf git-pm-0.0.1.tar.gz -C git-pm --strip-components=1 && rm git-pm-0.0.1.tar.gz
    
    # Or step-by-step:
-   wget https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/v0.0.1/git-pm-0.0.1.tar.gz
+   wget https://github.com/Warrenn/git-pm/releases/download/v0.0.1/git-pm-0.0.1.tar.gz
    tar -xzf git-pm-0.0.1.tar.gz
    cd git-pm
    python git-pm.py --version
@@ -89,14 +89,14 @@ Share this with users who want to install your tool:
 
 ```bash
 # Install git-pm v0.0.1
-curl -L -o git-pm.tar.gz https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/v0.0.1/git-pm-0.0.1.tar.gz && mkdir -p git-pm && tar -xzf git-pm.tar.gz -C git-pm --strip-components=1 && rm git-pm.tar.gz
+curl -L -o git-pm.tar.gz https://github.com/Warrenn/git-pm/releases/download/v0.0.1/git-pm-0.0.1.tar.gz && mkdir -p git-pm && tar -xzf git-pm.tar.gz -C git-pm --strip-components=1 && rm git-pm.tar.gz
 
 # Verify installation
 cd git-pm
 python git-pm.py --version
 ```
 
-Replace `v0.0.1`, `0.0.1`, and `YOUR_USERNAME/YOUR_REPO` with actual values.
+Replace `v0.0.1`, `0.0.1`, and `Warrenn/git-pm` with actual values.
 
 ## Troubleshooting
 
@@ -138,7 +138,7 @@ git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin v0.1.0
 
 # Wait 1-2 minutes for GitHub Actions
-# Check: https://github.com/YOUR_USERNAME/YOUR_REPO/releases
+# Check: https://github.com/Warrenn/git-pm/releases
 ```
 
 That's it! 🚀

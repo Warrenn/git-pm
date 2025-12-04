@@ -57,18 +57,37 @@ jobs:
           cat > release_notes.md << 'EOF'
           ## git-pm ${{ steps.get_version.outputs.version }}
           
-          ### What's Included
+          ### 🚀 Quick Installation (Recommended)
           
-          - `git-pm.py` - Main Python script
+          **One-liner:** Download, extract to `git-pm` folder, and cleanup
+          
+          ```bash
+          curl -L -o git-pm.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.tag }}/git-pm-${{ steps.get_version.outputs.version }}.tar.gz && mkdir -p git-pm && tar -xzf git-pm.tar.gz -C git-pm --strip-components=1 && rm git-pm.tar.gz
+          ```
+          
+          **Verify installation:**
+          ```bash
+          cd git-pm
+          python git-pm.py --version
+          ```
+          
+          ### 📦 What's Included
+          
+          - `git-pm.py` - Main Python script (zero dependencies, stdlib only)
           - `simple-test.sh` - Quick validation test
           - `test-git-pm.sh` - Comprehensive test suite
-          - Complete documentation (README.md, QUICKSTART.md, etc.)
+          - Complete documentation (README.md, QUICKSTART.md, ADD_COMMAND.md, etc.)
           - Example configurations in `examples/` directory
+          - Default configuration template
           
-          ### Installation
+          ### 📋 Alternative Installation
+          
+          <details>
+          <summary>Step-by-step installation</summary>
           
           1. Download and extract the archive:
              ```bash
+             wget https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.tag }}/git-pm-${{ steps.get_version.outputs.version }}.tar.gz
              tar -xzf git-pm-${{ steps.get_version.outputs.version }}.tar.gz
              cd git-pm-${{ steps.get_version.outputs.version }}
              ```
@@ -83,25 +102,39 @@ jobs:
              ```bash
              python git-pm.py --version
              ```
+          </details>
           
-          ### Requirements
+          ### ✅ Requirements
           
-          - Python 3.6 or higher
+          - Python 3.7 or higher
           - Git command-line tool
+          - No external dependencies required (pure Python stdlib)
           
-          ### Quick Start
+          ### 🎯 Quick Start
           
-          See `QUICKSTART.md` for detailed instructions.
+          ```bash
+          # Add a package
+          python git-pm.py add utils github.com/company/monorepo --path packages/utils
           
-          ### Documentation
+          # Install packages
+          python git-pm.py install
+          
+          # List installed packages
+          python git-pm.py list
+          ```
+          
+          See `QUICKSTART.md` and `ADD_COMMAND.md` for detailed instructions.
+          
+          ### 📚 Documentation
           
           - `README.md` - Full documentation
           - `QUICKSTART.md` - Getting started guide
+          - `ADD_COMMAND.md` - Add command reference
           - `DOCUMENTATION.md` - Design details
           - `REFERENCE.md` - Quick reference card
           - `examples/` - Configuration examples
           
-          ### Testing
+          ### 🧪 Testing
           
           ```bash
           # Quick test
