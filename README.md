@@ -29,14 +29,32 @@ A lightweight package manager that uses git sparse-checkout to manage dependenci
     └── .gitignore              # Recommended .gitignore entries
 ```
 
-## Quick Start
+## Installation
 
-### 1. Prerequisites
+### Quick Install from GitHub Release
 
+```bash
+# One-liner: Download, extract to git-pm folder, and cleanup
+curl -L -o git-pm.tar.gz https://github.com/Warrenn/git-pm/releases/download/v0.0.6/git-pm-0.0.6.tar.gz && mkdir -p git-pm && tar -xzf git-pm.tar.gz -C git-pm --strip-components=1 && rm git-pm.tar.gz
+
+cd git-pm
+python git-pm.py --version
+```
+
+Replace `v0.0.6` and `0.0.6` with the latest version from [releases](https://github.com/Warrenn/git-pm/releases).
+
+### Manual Download
+
+Download the latest `git-pm.py` directly from GitHub and run it with Python 3.7+.
+
+**Prerequisites:**
 - Python 3.7 or higher
 - Git command-line tool
+- No external dependencies required (pure Python stdlib)
 
-### 2. Create a manifest
+## Quick Start
+
+### 1. Create a manifest
 
 **💡 Tip:** Use the `add` command instead of manually editing YAML - it's easier and prevents syntax errors. See [ADD_COMMAND.md](ADD_COMMAND.md) for complete documentation.
 
@@ -63,7 +81,7 @@ python git-pm.py add utils github.com/company/monorepo \
 
 See [ADD_COMMAND.md](ADD_COMMAND.md) for detailed usage.
 
-### 3. Install packages
+### 2. Install packages
 
 ```bash
 python git-pm.py install

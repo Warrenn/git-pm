@@ -2,7 +2,22 @@
 
 ## Installation
 
-No installation required! Just download `git-pm.py` and run it with Python 3.7+.
+### Quick Install from GitHub Release
+
+```bash
+# One-liner: Download latest release, extract, and cleanup
+curl -L -o git-pm.tar.gz https://github.com/Warrenn/git-pm/releases/download/v0.0.6/git-pm-0.0.6.tar.gz && mkdir -p git-pm && tar -xzf git-pm.tar.gz -C git-pm --strip-components=1 && rm git-pm.tar.gz
+
+# Verify installation
+cd git-pm
+python git-pm.py --version
+```
+
+Replace `v0.0.6` and `0.0.6` with the latest release version from: https://github.com/Warrenn/git-pm/releases
+
+### Manual Download
+
+Alternatively, download `git-pm.py` directly and run it with Python 3.7+.
 
 ### Prerequisites
 
