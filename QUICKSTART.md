@@ -15,6 +15,21 @@ No installation required! Just download `git-pm.py` and run it with Python 3.7+.
 
 ### 1. Create a manifest file
 
+**Option A: Use the add command (easier)**
+
+```bash
+python git-pm.py add utils github.com/company/monorepo \
+    --path packages/utils \
+    --ref-type tag \
+    --ref-value v1.2.0
+```
+
+This creates `git-pm.yaml` automatically.
+
+**See [ADD_COMMAND.md](ADD_COMMAND.md) for complete add command documentation.**
+
+**Option B: Create manually**
+
 Create `git-pm.yaml` in your project root:
 
 ```yaml
@@ -37,7 +52,7 @@ This will:
 - Clone packages from git repositories
 - Use sparse-checkout to get only the specified paths
 - Cache packages in `~/.cache/git-pm/` (Linux) or `%LOCALAPPDATA%\git-pm\cache\` (Windows)
-- Create symlinks in `.git-packages/` directory
+- Copy packages to `.git-packages/` directory
 - Generate `git-pm.lock` for reproducibility
 
 ### 3. Use packages in your code
@@ -53,6 +68,15 @@ from utils import helper
 ## Common Commands
 
 ```bash
+# Add a package to manifest
+python git-pm.py add utils github.com/company/utilities
+
+# Add with specific version
+python git-pm.py add auth github.com/company/monorepo \
+    --path packages/auth \
+    --ref-type tag \
+    --ref-value v2.1.0
+
 # Install all packages from manifest
 python git-pm.py install
 
@@ -68,6 +92,8 @@ python git-pm.py clean
 # Clean packages and cache
 python git-pm.py clean --cache
 ```
+
+For complete add command documentation, see [ADD_COMMAND.md](ADD_COMMAND.md).
 
 ## Local Development
 

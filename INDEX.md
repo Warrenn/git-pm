@@ -24,11 +24,12 @@ This directory contains a fully functional git-based package manager implementat
 ## 📁 Files Included
 
 ### Core Script
-- **git-pm.py** (26KB) - Main Python script
-  - 750+ lines of Python 3.6+ compatible code
-  - All commands: install, update, clean, list
+- **git-pm.py** (33KB) - Main Python script
+  - 900+ lines of Python 3.7+ compatible code
+  - All commands: add, install, update, clean, list
   - Cross-platform (Windows & Linux)
   - Zero external dependencies
+  - Built-in YAML parser
 
 ### Test Scripts
 - **simple-test.sh** (2.9KB) - Quick validation test ✅ PASSING
@@ -72,12 +73,24 @@ This directory contains a fully functional git-based package manager implementat
   - Config options
   - Common workflows
   
+- **ADD_COMMAND.md** (5.8KB) - Add command documentation
+  - Complete add command reference
+  - Examples for all git providers
+  - Common workflows
+  - Tips and best practices
+  
 - **IMPLEMENTATION_SUMMARY.md** (7.5KB) - This implementation
   - What was created
   - Features implemented
   - Test results
   - Design decisions addressed
 
+### Configuration
+- **git-pm.default.yaml** - Default configuration file
+  - User-customizable defaults
+  - Protocol settings
+  - Cache and package directories
+  
 ### Examples
 - **examples/git-pm.yaml** - Main manifest examples
   - 5 different package configurations
@@ -102,6 +115,53 @@ This directory contains a fully functional git-based package manager implementat
   - What to commit
   - What not to commit
 
+### GitHub Actions Workflows
+- **.github/workflows/release.yml** - Automated release workflow
+  - Triggers on version tags (v0.0.1, v1.2.3, etc.)
+  - Creates tar.gz archive
+  - Generates SHA256 checksum
+  - Creates GitHub Release with notes
+  
+- **.github/workflows/release-simple.yml** - Simple release workflow
+  - Minimal release process
+  - Just tar + GitHub Release
+  
+- **.github/workflows/ci.yml** - Continuous Integration
+  - Tests on Python 3.7-3.11
+  - Runs all test suites
+  - Validates documentation
+  
+- **GITHUB_ACTIONS_GUIDE.md** - Complete workflow documentation
+- **RELEASE_GUIDE.md** - Quick release instructions
+
+### GitHub Actions / CI/CD
+- **.github/workflows/release.yml** - Full release workflow
+  - Triggers on version tags (v*.*.*)
+  - Creates tar.gz archive
+  - Generates release notes
+  - Creates GitHub Release with assets
+  
+- **.github/workflows/release-simple.yml** - Simple release workflow
+  - Minimal configuration alternative
+  - Just tar and release
+  
+- **.github/workflows/ci.yml** - Continuous integration
+  - Tests on Python 3.7-3.11
+  - Runs test suite on PRs and pushes
+  - Validates documentation
+  
+- **GITHUB_ACTIONS.md** - Complete GitHub Actions guide
+  - How to create releases
+  - Workflow customization
+  - Troubleshooting
+  - Examples
+  
+- **create-release.sh** - Helper script for creating releases
+  - Interactive release creation
+  - Validates version format
+  - Checks for uncommitted changes
+  - Pushes tags to trigger workflows
+
 ## 🎯 Recommended Reading Order
 
 ### For Quick Start:
@@ -109,12 +169,19 @@ This directory contains a fully functional git-based package manager implementat
 2. **QUICKSTART.md** - Get up and running
 3. Run **simple-test.sh** - See it work
 4. **REFERENCE.md** - Keep handy while using
+5. **ADD_COMMAND.md** - Learn the add command
+6. **RELEASE_GUIDE.md** - How to create releases
 
 ### For Deep Understanding:
 1. **README.md** - Full documentation
 2. **DOCUMENTATION.md** - Design decisions explained
 3. **examples/** - Working configuration examples
 4. Run **test-git-pm.sh** - See all features tested
+
+### For Maintainers/Contributors:
+1. **GITHUB_ACTIONS_GUIDE.md** - CI/CD workflows
+2. **RELEASE_GUIDE.md** - Creating releases
+3. **.github/workflows/** - GitHub Actions configuration
 
 ## 🧪 Testing
 
@@ -141,16 +208,17 @@ Runs 7 test scenarios. Takes ~30 seconds.
 - [x] Sparse git checkout
 - [x] Branch auto-update
 - [x] Lockfile generation
-- [x] Cross-platform symlinks
+- [x] File copying (cross-platform, no admin needed)
 - [x] SSH & HTTPS authentication
 - [x] Token authentication for CI/CD
 - [x] Local development overrides
-- [x] Config hierarchy (user/project/env)
+- [x] Config hierarchy (default/user/project/env)
 - [x] Multiple git providers (GitHub/GitLab/Azure DevOps)
 - [x] File:// URLs for testing
-- [x] All CLI commands (install/update/clean/list)
+- [x] All CLI commands (add/install/update/clean/list)
 - [x] Git auto-detection
-- [x] Python 3.6+ compatibility
+- [x] Python 3.7-3.12 compatibility
+- [x] Zero external dependencies (built-in YAML parser)
 
 ## 📊 Test Status
 
@@ -169,7 +237,19 @@ Runs 7 test scenarios. Takes ~30 seconds.
 
 ## 🎓 Usage Examples
 
-### Basic Install
+### Basic Install (Option 1: Using add command)
+```bash
+# Add package using add command
+python git-pm.py add utils github.com/company/monorepo \
+    --path packages/utils \
+    --ref-type tag \
+    --ref-value v1.0.0
+
+# Install
+python git-pm.py install
+```
+
+### Basic Install (Option 2: Manual manifest)
 ```bash
 # Create manifest
 cat > git-pm.yaml << EOF
@@ -210,10 +290,10 @@ python git-pm.py install
 
 ## 📝 Notes
 
-- **Python Version**: 3.6+ compatible (tested on 3.x)
+- **Python Version**: 3.7-3.12 compatible (tested on all versions)
 - **Git Version**: 2.x required (uses sparse-checkout)
-- **Platform**: Linux tested, Windows compatible
-- **Dependencies**: None (optional PyYAML for better YAML)
+- **Platform**: Linux and Windows compatible
+- **Dependencies**: None - uses only Python standard library
 
 ## 🐛 Known Issues
 
@@ -238,7 +318,7 @@ The implementation is complete and tested. All requested features are working:
 ✅ Branch auto-update on install  
 ✅ Lockfile for reproducibility  
 ✅ Minimal prerequisites (Python + Git)  
-✅ Python 3.6+ compatibility  
+✅ Python 3.7+ compatibility  
 ✅ Cross-platform support  
 ✅ Config hierarchy  
 ✅ Local development workflow  

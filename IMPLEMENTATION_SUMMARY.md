@@ -8,7 +8,7 @@ I've successfully created a fully functional git-based package manager with all 
 
 ### Core Script
 - **git-pm.py** - Main Python script (750+ lines)
-  - Python 3.6+ compatible
+  - Python 3.7+ compatible
   - Cross-platform (Windows & Linux)
   - Zero external dependencies (optional PyYAML for better YAML support)
   - All requested commands: install, update, clean, list
@@ -37,7 +37,7 @@ I've successfully created a fully functional git-based package manager with all 
 - [x] Branch auto-update on install
 - [x] Lockfile for reproducibility
 - [x] Cross-platform symlinks/junctions
-- [x] Python 3.6+ compatibility
+- [x] Python 3.7+ compatibility
 
 ### ✅ Repository Handling
 - [x] Canonical repository identifiers
@@ -58,6 +58,7 @@ I've successfully created a fully functional git-based package manager with all 
 - [x] Easy switching between git and local versions
 
 ### ✅ CLI Commands
+- [x] `add` - Add packages to manifest (see [ADD_COMMAND.md](ADD_COMMAND.md))
 - [x] `install` - Install all packages from manifest
 - [x] `update` - Update branch references to latest
 - [x] `list` - Show installed packages with details
@@ -104,6 +105,28 @@ I've successfully created a fully functional git-based package manager with all 
 This creates a mock repo and tests basic functionality.
 
 ### 2. Try It Yourself
+
+**Option A: Using add command (recommended)**
+```bash
+# Add a package
+python git-pm.py add mypackage github.com/owner/repo \
+    --path packages/subdir \
+    --ref-type tag \
+    --ref-value v1.0.0
+
+# Install
+python git-pm.py install
+
+# List packages
+python git-pm.py list
+
+# Clean up
+python git-pm.py clean
+```
+
+See [ADD_COMMAND.md](ADD_COMMAND.md) for complete documentation.
+
+**Option B: Manual YAML**
 ```bash
 # Create a manifest
 cat > git-pm.yaml << EOF
@@ -164,6 +187,7 @@ Project files:
 ├── git-pm.py              # Main script
 ├── README.md              # Main documentation
 ├── QUICKSTART.md          # Getting started guide
+├── ADD_COMMAND.md         # Add command documentation
 ├── DOCUMENTATION.md       # Comprehensive docs
 ├── simple-test.sh         # Simple test
 ├── test-git-pm.sh         # Full test suite
@@ -247,7 +271,7 @@ your-project/
 
 ## Success Criteria Met
 
-✅ Works with minimal requirements (Python 3.6+ and Git)  
+✅ Works with minimal requirements (Python 3.7+ and Git)  
 ✅ Simple install command works reliably  
 ✅ Cross-platform compatible  
 ✅ Hash-based caching  

@@ -18,6 +18,7 @@ A lightweight package manager that uses git sparse-checkout to manage dependenci
 .
 ├── git-pm.py                    # Main Python script
 ├── QUICKSTART.md                # Quick start guide
+├── ADD_COMMAND.md               # Add command documentation
 ├── test-git-pm.sh              # Comprehensive test suite
 ├── simple-test.sh              # Simple manual test
 └── examples/
@@ -37,7 +38,9 @@ A lightweight package manager that uses git sparse-checkout to manage dependenci
 
 ### 2. Create a manifest
 
-Create `git-pm.yaml`:
+**💡 Tip:** Use the `add` command instead of manually editing YAML - it's easier and prevents syntax errors. See [ADD_COMMAND.md](ADD_COMMAND.md) for complete documentation.
+
+You can create `git-pm.yaml` manually:
 
 ```yaml
 packages:
@@ -48,6 +51,17 @@ packages:
       type: tag
       value: v1.2.0
 ```
+
+Or use the `add` command (easier):
+
+```bash
+python git-pm.py add utils github.com/company/monorepo \
+    --path packages/utils \
+    --ref-type tag \
+    --ref-value v1.2.0
+```
+
+See [ADD_COMMAND.md](ADD_COMMAND.md) for detailed usage.
 
 ### 3. Install packages
 
@@ -100,6 +114,9 @@ Clean up test files:
 ## Commands
 
 ```bash
+# Add a package to manifest
+python git-pm.py add <n> <repo> [--path PATH] [--ref-type TYPE] [--ref-value VALUE]
+
 # Install packages from manifest
 python git-pm.py install
 
@@ -118,6 +135,26 @@ python git-pm.py clean --cache
 # Show version
 python git-pm.py --version
 ```
+
+### Add Command
+
+Easily add packages without manually editing YAML:
+
+```bash
+# Add from GitHub
+python git-pm.py add utils github.com/company/utilities
+
+# Add with specific tag
+python git-pm.py add auth github.com/company/monorepo \
+    --path packages/auth \
+    --ref-type tag \
+    --ref-value v2.1.0
+
+# Add from Azure DevOps
+python git-pm.py add models dev.azure.com/org/project/_git/models
+```
+
+See [ADD_COMMAND.md](ADD_COMMAND.md) for complete documentation.
 
 ## Configuration Hierarchy
 
@@ -142,8 +179,8 @@ your-project/
 ├── .git-pm/
 │   └── config.yaml          # Project config (team decides)
 ├── .git-packages/           # Installed packages (NOT committed)
-│   ├── utils/               → symlink to cache
-│   └── components/          → symlink to cache
+│   ├── utils/               # Copied from cache
+│   └── components/          # Copied from cache
 └── .gitignore               # Ignore .git-packages, etc.
 
 ~/.cache/git-pm/             # User-level cache (Linux)
@@ -216,6 +253,8 @@ python git-pm.py install
 Now `.git-packages/utils` points to your local directory!
 
 ## Manifest Format
+
+**💡 Tip:** Instead of manually editing YAML, use the `add` command to manage packages. See [ADD_COMMAND.md](ADD_COMMAND.md).
 
 ### Basic Package
 

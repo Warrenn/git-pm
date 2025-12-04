@@ -1,5 +1,7 @@
 # git-pm Quick Reference Card
 
+**💡 For detailed add command documentation, see [ADD_COMMAND.md](ADD_COMMAND.md)**
+
 ## Installation
 ```bash
 # No installation needed - just run the script!
@@ -8,12 +10,22 @@ python git-pm.py --version
 
 ## Basic Commands
 ```bash
+# Add package to manifest
+python git-pm.py add <n> <repo> [--path PATH] [--ref-type TYPE] [--ref-value VALUE]
+
+# Examples
+python git-pm.py add utils github.com/company/utils
+python git-pm.py add auth github.com/company/monorepo --path packages/auth --ref-type tag --ref-value v2.0.0
+
+# Package operations
 python git-pm.py install      # Install all packages
 python git-pm.py update       # Update branch references
 python git-pm.py list         # List installed packages
 python git-pm.py clean        # Remove installed packages
 python git-pm.py clean --cache # Also remove cache
 ```
+
+See [ADD_COMMAND.md](ADD_COMMAND.md) for complete add command documentation.
 
 ## Manifest Format (git-pm.yaml)
 ```yaml
@@ -120,7 +132,21 @@ path: ../local-path
 
 ## Typical Workflow
 
-### Setup
+### Setup (Using add command - Recommended)
+```bash
+# Add packages using add command
+python git-pm.py add utils github.com/company/monorepo \
+    --path packages/utils \
+    --ref-type tag \
+    --ref-value v1.0.0
+
+# Install
+python git-pm.py install
+```
+
+See [ADD_COMMAND.md](ADD_COMMAND.md) for more examples.
+
+### Setup (Manual YAML)
 ```bash
 # 1. Create manifest
 cat > git-pm.yaml << EOF
@@ -241,5 +267,6 @@ python git-pm.py install --help
 ## Documentation
 - `README.md` - Full documentation
 - `QUICKSTART.md` - Step-by-step guide
+- `ADD_COMMAND.md` - Add command reference
 - `DOCUMENTATION.md` - Design details
 - `examples/` - Working examples

@@ -4,13 +4,44 @@ This document addresses the key design decisions and workflows for git-pm.
 
 ## Table of Contents
 
-1. [Repository URL Handling](#repository-url-handling)
-2. [Consistent Code Usage](#consistent-code-usage)
-3. [Local Development Workflow](#local-development-workflow)
-4. [CI/CD Authentication](#cicd-authentication)
-5. [Cache Management](#cache-management)
-6. [Configuration System](#configuration-system)
-7. [Conflict Resolution](#conflict-resolution)
+1. [Package Management](#package-management)
+2. [Repository URL Handling](#repository-url-handling)
+3. [Consistent Code Usage](#consistent-code-usage)
+4. [Local Development Workflow](#local-development-workflow)
+5. [CI/CD Authentication](#cicd-authentication)
+6. [Cache Management](#cache-management)
+7. [Configuration System](#configuration-system)
+8. [Conflict Resolution](#conflict-resolution)
+
+---
+
+## Package Management
+
+### Adding Packages
+
+**Recommended: Use the `add` command** to avoid YAML syntax errors and ensure correct formatting.
+
+```bash
+# Add a package
+python git-pm.py add utils github.com/company/monorepo \
+    --path packages/utils \
+    --ref-type tag \
+    --ref-value v1.2.0
+```
+
+For complete documentation on the `add` command, including examples for GitHub, GitLab, and Azure DevOps, see **[ADD_COMMAND.md](ADD_COMMAND.md)**.
+
+Alternatively, you can manually edit `git-pm.yaml`:
+
+```yaml
+packages:
+  utils:
+    repo: github.com/company/monorepo
+    path: packages/utils
+    ref:
+      type: tag
+      value: v1.2.0
+```
 
 ---
 
