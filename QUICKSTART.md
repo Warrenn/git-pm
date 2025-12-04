@@ -2,12 +2,14 @@
 
 ## Installation
 
-No installation required! Just download `git-pm.py` and run it with Python 3.6+.
+No installation required! Just download `git-pm.py` and run it with Python 3.7+.
 
 ### Prerequisites
 
-- Python 3.6 or higher
+- Python 3.7 or higher
 - Git command-line tool
+
+**That's it!** No external dependencies needed - git-pm uses only Python's standard library.
 
 ## Basic Usage
 

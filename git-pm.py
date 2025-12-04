@@ -9,19 +9,115 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:
-    # Fallback to json if PyYAML not available
-    yaml = None
-
 __version__ = "0.1.0"
+
+
+class SimpleYAML:
+    """Simple YAML parser for git-pm's subset of YAML
+    
+    Supports:
+    - Comments (lines starting with #)
+    - Key-value pairs (key: value)
+    - Nested dictionaries (indentation-based)
+    - Strings (quoted and unquoted)
+    - Empty lines
+    
+    Does NOT support:
+    - Lists with - syntax (use dict keys instead)
+    - Multi-line strings
+    - Anchors and aliases
+    - Complex data types
+    """
+    
+    @staticmethod
+    def load(file_obj):
+        """Load YAML from file object"""
+        lines = file_obj.readlines()
+        return SimpleYAML._parse_lines(lines)
+    
+    @staticmethod
+    def loads(text):
+        """Load YAML from string"""
+        lines = text.split('\n')
+        return SimpleYAML._parse_lines(lines)
+    
+    @staticmethod
+    def _parse_lines(lines):
+        """Parse YAML lines into dictionary"""
+        result = {}
+        stack = [(result, -1)]  # (dict, indent_level)
+        
+        for line_num, line in enumerate(lines, 1):
+            # Remove trailing whitespace
+            line = line.rstrip()
+            
+            # Skip empty lines and comments
+            if not line or line.lstrip().startswith('#'):
+                continue
+            
+            # Calculate indentation
+            indent = len(line) - len(line.lstrip())
+            line = line.lstrip()
+            
+            # Parse key-value pair
+            if ':' in line:
+                key, _, value = line.partition(':')
+                key = key.strip()
+                value = value.strip()
+                
+                # Remove quotes from value if present
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+                elif value.startswith("'") and value.endswith("'"):
+                    value = value[1:-1]
+                
+                # Pop stack until we find the right parent
+                while len(stack) > 1 and stack[-1][1] >= indent:
+                    stack.pop()
+                
+                parent_dict = stack[-1][0]
+                
+                # If value is empty, this is a nested dict
+                if not value:
+                    new_dict = {}
+                    parent_dict[key] = new_dict
+                    stack.append((new_dict, indent))
+                else:
+                    # Store the value
+                    parent_dict[key] = value
+        
+        return result
+    
+    @staticmethod
+    def dump(data, file_obj):
+        """Dump data to YAML format"""
+        yaml_str = SimpleYAML.dumps(data)
+        file_obj.write(yaml_str)
+    
+    @staticmethod
+    def dumps(data, indent=0):
+        """Convert data to YAML string"""
+        lines = []
+        indent_str = '  ' * indent
+        
+        for key, value in data.items():
+            if isinstance(value, dict):
+                lines.append('{}{}:'.format(indent_str, key))
+                lines.append(SimpleYAML.dumps(value, indent + 1))
+            else:
+                # Quote value if it contains special characters
+                if isinstance(value, str) and (':' in value or '#' in value or value.startswith(' ')):
+                    value = '"{}"'.format(value)
+                lines.append('{}{}: {}'.format(indent_str, key, value))
+        
+        return '\n'.join(lines)
 
 
 class GitPM:
@@ -150,36 +246,20 @@ class GitPM:
         return result
     
     def _load_yaml_file(self, filepath):
-        """Load YAML file, with fallback to JSON"""
+        """Load YAML file using built-in parser"""
         try:
             with open(filepath, 'r') as f:
-                if yaml:
-                    return yaml.safe_load(f)
-                else:
-                    # Try JSON as fallback
-                    print("Note: PyYAML not installed. Trying to parse as JSON...")
-                    print("      For better YAML support: pip install PyYAML")
-                    try:
-                        return json.load(f)
-                    except json.JSONDecodeError as je:
-                        print("")
-                        print("Error: File appears to be YAML, not JSON")
-                        print("       Please install PyYAML: pip install PyYAML")
-                        print("       Or convert your file to JSON format")
-                        return None
+                return SimpleYAML.load(f)
         except Exception as e:
             print("Warning: Failed to load {}: {}".format(filepath, e))
             return None
     
     def _save_yaml_file(self, filepath, data):
-        """Save data to YAML file, with fallback to JSON"""
+        """Save data to YAML file using built-in serializer"""
         filepath.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(filepath, 'w') as f:
-                if yaml:
-                    yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
-                else:
-                    json.dump(data, f, indent=2)
+                SimpleYAML.dump(data, f)
         except Exception as e:
             print("Error: Failed to save {}: {}".format(filepath, e))
             return False
@@ -418,7 +498,9 @@ class GitPM:
         target.parent.mkdir(parents=True, exist_ok=True)
         
         try:
-            shutil.copytree(source, target, symlinks=False, dirs_exist_ok=True)
+            # Use copytree without dirs_exist_ok for Python 3.7 compatibility
+            # We already removed the target directory above if it existed
+            shutil.copytree(source, target, symlinks=False)
             print("    ✓ Copied: {} -> {}".format(source, target.name))
             return True
         except Exception as e:

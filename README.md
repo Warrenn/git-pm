@@ -10,7 +10,7 @@ A lightweight package manager that uses git sparse-checkout to manage dependenci
 ✅ **Cross-platform** - Works on Windows and Linux  
 ✅ **Multiple auth methods** - SSH, HTTPS, tokens for CI/CD  
 ✅ **Lockfile support** - Reproducible builds  
-✅ **Zero dependencies** - Pure Python 3.6+ (optional PyYAML)  
+✅ **Zero dependencies** - Pure Python 3.7+, stdlib only  
 
 ## Files in This Implementation
 
@@ -32,7 +32,7 @@ A lightweight package manager that uses git sparse-checkout to manage dependenci
 
 ### 1. Prerequisites
 
-- Python 3.6 or higher
+- Python 3.7 or higher
 - Git command-line tool
 
 ### 2. Create a manifest
@@ -297,21 +297,21 @@ This implementation follows the specifications:
 4. ✅ **Branch auto-update** on install
 5. ✅ **Lockfile** for reproducibility
 6. ✅ **Minimal prerequisites** (Python + Git)
-7. ✅ **Python 3.6+** compatibility
+7. ✅ **Python 3.7+** compatibility
 8. ✅ **Cross-platform** (Windows & Linux)
 9. ✅ **Config hierarchy** (user → project → env)
 10. ✅ **Local overrides** for development
 
 ## Python Compatibility
 
-The code is compatible with Python 3.6+ by avoiding:
+The code is compatible with Python 3.7+ by avoiding:
 
 - f-strings with `=` (3.8+)
 - `|` dict merge operator (3.9+)
 - `match/case` statements (3.10+)
 - Modern typing features (3.10+)
 
-Uses only stdlib, with optional PyYAML for better YAML support (falls back to JSON).
+Uses only Python standard library - no external dependencies required. Includes a built-in YAML parser.
 
 ## Windows Support
 
@@ -353,6 +353,33 @@ git clone <repo-url>
 cd repo
 ls -la packages/  # Check structure
 ```
+
+## GitHub Actions / CI/CD
+
+The implementation includes ready-to-use GitHub Actions workflows:
+
+### Release Automation
+```bash
+# Create a release - it's automatic!
+git tag -a v0.0.1 -m "Release version 0.0.1"
+git push origin v0.0.1
+
+# Or use the helper script
+./create-release.sh
+```
+
+When you push a version tag:
+- ✅ Automatically creates tar.gz archive
+- ✅ Generates release notes
+- ✅ Creates GitHub Release
+- ✅ Attaches archive as downloadable asset
+
+### Continuous Integration
+- Automatically tests on Python 3.7-3.12
+- Runs on pull requests and pushes
+- Validates code and documentation
+
+See **[GITHUB_ACTIONS.md](computer:///mnt/user-data/outputs/git-pm-implementation/GITHUB_ACTIONS.md)** for complete documentation.
 
 ## Examples
 
