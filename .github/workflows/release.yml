@@ -30,8 +30,8 @@ jobs:
           # Create archive name with version
           ARCHIVE_NAME="git-pm-${{ steps.get_version.outputs.version }}.tar.gz"
           
-          # Create tar archive excluding unnecessary files
-          tar -czf "$ARCHIVE_NAME" \
+          # Create tar archive in parent directory to avoid "file changed" error
+          tar -czf "../$ARCHIVE_NAME" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='test-workspace' \
@@ -40,6 +40,9 @@ jobs:
             --exclude='*.pyc' \
             --exclude='.DS_Store' \
             .
+          
+          # Move archive back to current directory
+          mv "../$ARCHIVE_NAME" .
           
           echo "Created archive: $ARCHIVE_NAME"
           ls -lh "$ARCHIVE_NAME"
