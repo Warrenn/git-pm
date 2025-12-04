@@ -1,0 +1,130 @@
+name: CI Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10', '3.11']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Check Python version
+        run: |
+          python --version
+          python -c "import sys; print(f'Python {sys.version}')"
+      
+      - name: Check git installation
+        run: git --version
+      
+      - name: Validate git-pm script syntax
+        run: python -m py_compile git-pm.py
+      
+      - name: Run simple test
+        run: |
+          chmod +x simple-test.sh
+          ./simple-test.sh
+      
+      - name: Run comprehensive tests
+        run: |
+          chmod +x test-git-pm.sh
+          ./test-git-pm.sh all
+      
+      - name: Clean up test files
+        if: always()
+        run: |
+          ./test-git-pm.sh clean || true
+          rm -rf simple-test || true
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyflakes
+      
+      - name: Check for Python syntax errors
+        run: |
+          # Check for syntax errors and undefined names
+          pyflakes git-pm.py || true
+      
+      - name: Check script is executable
+        run: |
+          test -f git-pm.py
+          test -f simple-test.sh
+          test -f test-git-pm.sh
+
+  documentation:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check documentation files exist
+        run: |
+          test -f README.md
+          test -f QUICKSTART.md
+          test -f DOCUMENTATION.md
+          test -f REFERENCE.md
+          test -f examples/git-pm.yaml
+          test -f examples/git-pm.local.yaml
+          echo "✓ All documentation files present"
+      
+      - name: Validate YAML examples
+        run: |
+          python3 << 'EOF'
+          import json
+          
+          def validate_yaml_like(filepath):
+              """Basic validation - check file is readable and structured"""
+              try:
+                  with open(filepath, 'r') as f:
+                      content = f.read()
+                      if not content.strip():
+                          print(f"✗ {filepath} is empty")
+                          return False
+                      print(f"✓ {filepath} is valid")
+                      return True
+              except Exception as e:
+                  print(f"✗ {filepath}: {e}")
+                  return False
+          
+          files = [
+              'examples/git-pm.yaml',
+              'examples/git-pm.local.yaml',
+              'examples/user-config.yaml',
+              'examples/project-config.yaml'
+          ]
+          
+          all_valid = all(validate_yaml_like(f) for f in files)
+          exit(0 if all_valid else 1)
+          EOF

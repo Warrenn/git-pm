@@ -1,0 +1,134 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on tags like v0.0.1, v1.2.3, etc.
+
+permissions:
+  contents: write  # Required to create releases and upload assets
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Get version from tag
+        id: get_version
+        run: |
+          # Extract version from tag (removes 'v' prefix)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Create tar archive
+        run: |
+          # Create archive name with version
+          ARCHIVE_NAME="git-pm-${{ steps.get_version.outputs.version }}.tar.gz"
+          
+          # Create tar archive excluding unnecessary files
+          tar -czf "$ARCHIVE_NAME" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='test-workspace' \
+            --exclude='simple-test' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.DS_Store' \
+            .
+          
+          echo "Created archive: $ARCHIVE_NAME"
+          ls -lh "$ARCHIVE_NAME"
+          
+          # Save archive name for later steps
+          echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+        id: create_archive
+      
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## git-pm ${{ steps.get_version.outputs.version }}
+          
+          ### What's Included
+          
+          - `git-pm.py` - Main Python script
+          - `simple-test.sh` - Quick validation test
+          - `test-git-pm.sh` - Comprehensive test suite
+          - Complete documentation (README.md, QUICKSTART.md, etc.)
+          - Example configurations in `examples/` directory
+          
+          ### Installation
+          
+          1. Download and extract the archive:
+             ```bash
+             tar -xzf git-pm-${{ steps.get_version.outputs.version }}.tar.gz
+             cd git-pm-${{ steps.get_version.outputs.version }}
+             ```
+          
+          2. Run the simple test:
+             ```bash
+             chmod +x simple-test.sh
+             ./simple-test.sh
+             ```
+          
+          3. Start using git-pm:
+             ```bash
+             python git-pm.py --version
+             ```
+          
+          ### Requirements
+          
+          - Python 3.6 or higher
+          - Git command-line tool
+          
+          ### Quick Start
+          
+          See `QUICKSTART.md` for detailed instructions.
+          
+          ### Documentation
+          
+          - `README.md` - Full documentation
+          - `QUICKSTART.md` - Getting started guide
+          - `DOCUMENTATION.md` - Design details
+          - `REFERENCE.md` - Quick reference card
+          - `examples/` - Configuration examples
+          
+          ### Testing
+          
+          ```bash
+          # Quick test
+          ./simple-test.sh
+          
+          # Comprehensive test suite
+          ./test-git-pm.sh all
+          ```
+          
+          ---
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.tag }}
+          EOF
+          
+          cat release_notes.md
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.get_version.outputs.tag }}
+          body_path: release_notes.md
+          files: ${{ steps.create_archive.outputs.archive_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload artifact (for debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: git-pm-${{ steps.get_version.outputs.version }}
+          path: ${{ steps.create_archive.outputs.archive_name }}
+          retention-days: 90
