@@ -1,0 +1,14 @@
+# Installed packages directory (like node_modules)
+.git-packages/
+
+# Local development overrides (should not be committed)
+# git-pm.local.yaml
+
+# Optional: Project-level config (team decision)
+# .git-pm/config.yaml
+
+# Optional: Lock file (team decision)
+# git-pm.lock
+
+# Cache directory (if using local project cache)
+.git-pm-cache/

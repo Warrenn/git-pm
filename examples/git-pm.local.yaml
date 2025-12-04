@@ -1,0 +1,25 @@
+# git-pm.local.yaml EXAMPLE
+# This is an EXAMPLE file showing the format of local overrides
+# 
+# To use:
+# 1. Copy this file to your project root as "git-pm.local.yaml"
+# 2. Modify the paths for your local development setup
+# 3. Add "git-pm.local.yaml" to your project's .gitignore
+#
+# IMPORTANT: Your actual git-pm.local.yaml should NOT be committed!
+# This examples/git-pm.local.yaml file is for reference only.
+
+overrides:
+  # Override utils package to use local development version
+  utils:
+    type: local
+    path: ../monorepo-local/packages/utils
+  
+  # Override data-models with local version
+  data-models:
+    type: local
+    path: /home/username/workspace/data-models
+  
+  # You can override any package defined in git-pm.yaml
+  # The original package will be replaced with your local version
+  # This is useful when actively developing on a package
