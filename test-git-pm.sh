@@ -78,7 +78,7 @@ create_mock_repo() {
     git config user.name "Test User"
     
     mkdir -p packages/utils
-    echo "# Utils Package" > packages/utils/README.md
+    echo "# Utils Package" > packages/utils/README.md"
     echo "def hello():\n    return 'Hello from utils'" > packages/utils/utils.py
     
     mkdir -p packages/components
@@ -109,17 +109,17 @@ test_basic_install() {
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
-    cat > git-pm.yaml << 'EOF'
+    cat > git-pm.yaml << EOF
 packages:
   utils:
-    repo: file://../mock-repos/test-repo
+    repo: file://$TEST_DIR/mock-repos/test-repo
     path: packages/utils
     ref:
       type: tag
       value: v1.0.0
   
   components:
-    repo: file://../mock-repos/test-repo
+    repo: file://$TEST_DIR/mock-repos/test-repo
     path: packages/components
     ref:
       type: branch
@@ -166,10 +166,10 @@ test_local_override() {
     echo "def hello():\n    return 'Hello from LOCAL dev'" > "$TEST_DIR/local-dev/utils/utils.py"
     echo "# Local Development Version" > "$TEST_DIR/local-dev/utils/README.md"
     
-    cat > git-pm.yaml << 'EOF'
+    cat > git-pm.yaml << EOF
 packages:
   utils:
-    repo: file://../mock-repos/test-repo
+    repo: file://$TEST_DIR/mock-repos/test-repo
     path: packages/utils
     ref:
       type: tag
@@ -210,10 +210,10 @@ test_list_command() {
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
-    cat > git-pm.yaml << 'EOF'
+    cat > git-pm.yaml << EOF
 packages:
   utils:
-    repo: file://../mock-repos/test-repo
+    repo: file://$TEST_DIR/mock-repos/test-repo
     path: packages/utils
     ref:
       type: tag
@@ -238,10 +238,10 @@ test_update_command() {
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
-    cat > git-pm.yaml << 'EOF'
+    cat > git-pm.yaml << EOF
 packages:
   utils:
-    repo: file://../mock-repos/test-repo
+    repo: file://$TEST_DIR/mock-repos/test-repo
     path: packages/utils
     ref:
       type: branch
@@ -266,10 +266,10 @@ test_clean_command() {
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
-    cat > git-pm.yaml << 'EOF'
+    cat > git-pm.yaml << EOF
 packages:
   utils:
-    repo: file://../mock-repos/test-repo
+    repo: file://$TEST_DIR/mock-repos/test-repo
     path: packages/utils
     ref:
       type: tag
@@ -306,7 +306,7 @@ test_add_command() {
     cd "$project_dir"
     
     print_info "Running add command..."
-    run_gitpm add mypackage file://../mock-repos/test-repo --path packages/utils --ref-type tag --ref-value v1.0.0
+    run_gitpm add mypackage file://$TEST_DIR/mock-repos/test-repo --path packages/utils --ref-type tag --ref-value v1.0.0
     
     if [ -f "git-pm.yaml" ]; then
         print_success "Manifest created by add command"
