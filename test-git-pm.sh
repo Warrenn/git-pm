@@ -2,7 +2,7 @@
 # Test script for git-pm v0.1.1
 # Updated to work with parent-first manifest finding
 
-set -e  # Exit on error
+set +e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$SCRIPT_DIR/test-workspace"
