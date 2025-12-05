@@ -1,0 +1,7 @@
+packages:
+  mylib:
+    repo: file:///Users/warrennenslin/workbench/experiment/git-pm/simple-test/mock-repo
+    path: packages/mylib
+    ref:
+      type: tag
+      value: v1.0.0
