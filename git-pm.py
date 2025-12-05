@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "0.0.9"
+__version__ = "0.1.1"
 
 
 class SimpleYAML:
@@ -127,10 +127,32 @@ class GitPM:
         self.system = platform.system()
         self.user_config_dir = self._get_user_config_dir()
         self.user_cache_dir = self._get_user_cache_dir()
-        self.project_root = Path.cwd()
+        self.script_dir = Path(__file__).parent.resolve()
+        
+        # Find manifest directory (parent first, then script directory)
+        self.manifest_dir = self._find_manifest_dir()
+        
+        # For backwards compatibility, keep project_root as alias to manifest_dir
+        self.project_root = self.manifest_dir
+        
         self.config = {}
         self.manifest = {}
         self.lockfile = {}
+    
+    def _find_manifest_dir(self):
+        """Find the directory containing the manifest file.
+        
+        Looks in parent directory first, then falls back to script directory.
+        This allows keeping git-pm.py in a subdirectory while having the manifest
+        at the project root.
+        """
+        # Check parent directory first
+        parent_dir = self.script_dir.parent
+        if (parent_dir / "git-pm.yaml").exists():
+            return parent_dir
+        
+        # Fall back to script directory
+        return self.script_dir
         
     def _get_user_config_dir(self):
         """Get user-level config directory"""
@@ -188,11 +210,14 @@ class GitPM:
     
     def load_config(self):
         """Load and merge configuration from multiple sources"""
-        # 0. Load default config from file next to git-pm.py
-        script_dir = Path(__file__).parent.resolve()
-        default_config_file = script_dir / "git-pm.default.yaml"
+        # 0. Load default config from manifest directory first, then script directory
+        default_config_file = None
+        if (self.manifest_dir / "git-pm.default.yaml").exists():
+            default_config_file = self.manifest_dir / "git-pm.default.yaml"
+        elif (self.script_dir / "git-pm.default.yaml").exists():
+            default_config_file = self.script_dir / "git-pm.default.yaml"
         
-        if default_config_file.exists():
+        if default_config_file:
             config = self._load_yaml_file(default_config_file)
             if not config:
                 config = {}
@@ -220,8 +245,8 @@ class GitPM:
                 config = self._merge_dicts(config, user_config)
                 print("  Loaded user config: {}".format(user_config_file))
         
-        # 2. Load project-level config
-        project_config_file = self.project_root / ".git-pm" / "config.yaml"
+        # 2. Load project-level config (git-pm.config.yaml in manifest directory)
+        project_config_file = self.manifest_dir / "git-pm.config.yaml"
         if project_config_file.exists():
             project_config = self._load_yaml_file(project_config_file)
             if project_config:
@@ -267,10 +292,11 @@ class GitPM:
     
     def load_manifest(self):
         """Load manifest with local overrides"""
-        manifest_file = self.project_root / "git-pm.yaml"
+        manifest_file = self.manifest_dir / "git-pm.yaml"
         
         if not manifest_file.exists():
-            print("Error: git-pm.yaml not found in current directory")
+            print("Error: git-pm.yaml not found in {}".format(self.manifest_dir))
+            print("       (Looked in parent directory first, then script directory)")
             return None
         
         manifest = self._load_yaml_file(manifest_file)
@@ -278,7 +304,7 @@ class GitPM:
             return None
         
         # Load local overrides
-        local_override_file = self.project_root / "git-pm.local.yaml"
+        local_override_file = self.manifest_dir / "git-pm.local.yaml"
         if local_override_file.exists():
             overrides = self._load_yaml_file(local_override_file)
             if overrides and "overrides" in overrides:
@@ -513,13 +539,22 @@ class GitPM:
         
         # Check if local package
         if pkg_config.get("type") == "local":
-            local_path = Path(pkg_config["path"]).resolve()
+            # Resolve path relative to manifest directory
+            local_path_str = pkg_config["path"]
+            local_path = Path(local_path_str)
+            
+            # If relative path, resolve relative to manifest directory
+            if not local_path.is_absolute():
+                local_path = (self.manifest_dir / local_path).resolve()
+            else:
+                local_path = local_path.resolve()
+            
             if not local_path.exists():
                 print("  ✗ Local path does not exist: {}".format(local_path))
                 return None
             
             print("  Using local path: {}".format(local_path))
-            packages_dir = self.project_root / self.config["packages_dir"]
+            packages_dir = self.manifest_dir / self.config["packages_dir"]
             target = packages_dir / pkg_name
             
             self.copy_directory(local_path, target)

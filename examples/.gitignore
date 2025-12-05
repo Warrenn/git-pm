@@ -1,13 +1,22 @@
+# git-pm .gitignore
+# Add these entries to your project's .gitignore
+
 # Installed packages directory (like node_modules)
 .git-packages/
 
 # Local development overrides (should not be committed)
-# git-pm.local.yaml
+git-pm.local.yaml
 
 # Optional: Project-level config (team decision)
-# .git-pm/config.yaml
+# Uncomment if you want each developer to have their own config
+# git-pm.config.yaml
+
+# Optional: Default config (if using custom defaults)
+# git-pm.default.yaml
 
 # Optional: Lock file (team decision)
+# Uncomment if you prefer manual version management
+# Some teams commit this for reproducibility, others don't
 # git-pm.lock
 
 # Cache directory (if using local project cache)
