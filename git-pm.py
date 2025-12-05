@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 class SimpleYAML:
@@ -575,8 +575,23 @@ class GitPM:
         """Add a package to manifest"""
         print("📦 git-pm add")
         
-        if self.manifest_file.exists():
-            with open(self.manifest_file, 'r') as f:
+        # For add command, determine where to create the manifest
+        # If we're running from the parent directory (project root), use that
+        # Otherwise use script directory
+        cwd = Path.cwd()
+        parent_dir = self.script_dir.parent
+        
+        if cwd == parent_dir or (parent_dir / "git-pm.yaml").exists():
+            # We're in parent directory or parent has manifest
+            manifest_dir = parent_dir
+        else:
+            # Use script directory
+            manifest_dir = self.script_dir
+        
+        manifest_file = manifest_dir / "git-pm.yaml"
+        
+        if manifest_file.exists():
+            with open(manifest_file, 'r') as f:
                 manifest = SimpleYAML.load(f)
         else:
             print("Creating new manifest...")
@@ -594,8 +609,8 @@ class GitPM:
             }
         }
         
-        print("Saving manifest to {}...".format(self.manifest_file.name))
-        with open(self.manifest_file, 'w') as f:
+        print("Saving manifest to {}...".format(manifest_file.name))
+        with open(manifest_file, 'w') as f:
             SimpleYAML.dump(manifest, f)
         
         print("✓ Package '{}' added to manifest".format(name))

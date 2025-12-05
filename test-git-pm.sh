@@ -78,7 +78,7 @@ create_mock_repo() {
     git config user.name "Test User"
     
     mkdir -p packages/utils
-    echo "# Utils Package" > packages/utils/README.md
+    echo "# Utils Package" > packages/utils/README.md"
     echo "def hello():\n    return 'Hello from utils'" > packages/utils/utils.py
     
     mkdir -p packages/components
