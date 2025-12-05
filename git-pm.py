@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 class SimpleYAML:
@@ -419,31 +419,44 @@ class GitPM:
         cache_path.mkdir(parents=True, exist_ok=True)
         
         try:
-            # Initialize repository
-            subprocess.run(
-                ["git", "init"],
-                cwd=cache_path,
-                check=True,
-                capture_output=True
-            )
+            # Check if repository is already initialized
+            git_dir = cache_path / ".git"
+            is_initialized = git_dir.exists() and git_dir.is_dir()
             
-            # Add remote
-            subprocess.run(
-                ["git", "remote", "add", "origin", repo_url],
-                cwd=cache_path,
-                check=True,
-                capture_output=True
-            )
+            if not is_initialized:
+                # Initialize repository
+                subprocess.run(
+                    ["git", "init"],
+                    cwd=cache_path,
+                    check=True,
+                    capture_output=True
+                )
+                
+                # Add remote
+                subprocess.run(
+                    ["git", "remote", "add", "origin", repo_url],
+                    cwd=cache_path,
+                    check=True,
+                    capture_output=True
+                )
+                
+                # Configure sparse checkout
+                subprocess.run(
+                    ["git", "config", "core.sparseCheckout", "true"],
+                    cwd=cache_path,
+                    check=True,
+                    capture_output=True
+                )
+            else:
+                # Already initialized - update remote URL in case it changed
+                subprocess.run(
+                    ["git", "remote", "set-url", "origin", repo_url],
+                    cwd=cache_path,
+                    check=True,
+                    capture_output=True
+                )
             
-            # Configure sparse checkout
-            subprocess.run(
-                ["git", "config", "core.sparseCheckout", "true"],
-                cwd=cache_path,
-                check=True,
-                capture_output=True
-            )
-            
-            # Set sparse checkout pattern
+            # Set sparse checkout pattern (always update in case path changed)
             sparse_file = cache_path / ".git" / "info" / "sparse-checkout"
             sparse_file.parent.mkdir(parents=True, exist_ok=True)
             with open(sparse_file, 'w') as f:
