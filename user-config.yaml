@@ -14,7 +14,7 @@ auto_update_branches: true
 git_protocol:
   github.com: ssh        # Use SSH for GitHub
   gitlab.com: ssh        # Use SSH for GitLab
-  dev.azure.com: https   # Use HTTPS for Azure DevOps
+  dev.azure.com: ssh     # Use SSH for Azure DevOps
 
 # Custom URL patterns (optional)
 url_patterns:
