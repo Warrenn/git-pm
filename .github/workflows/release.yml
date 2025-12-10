@@ -1,170 +1,417 @@
-name: Create Release
+name: Release
 
 on:
   push:
     tags:
-      - 'v*.*.*'  # Triggers on tags like v0.0.1, v1.2.3, etc.
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.2.0)'
+        required: true
+        type: string
 
-permissions:
-  contents: write  # Required to create releases and upload assets
+env:
+  REPO_OWNER: ${{ github.repository_owner }}
+  REPO_NAME: ${{ github.event.repository.name }}
+  REPO_FULL: ${{ github.repository }}
+  REPO_URL: ${{ github.server_url }}/${{ github.repository }}
 
 jobs:
   create-release:
+    name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Get all history for changelog
       
-      - name: Get version from tag
-        id: get_version
+      - name: Get version
+        id: version
         run: |
-          # Extract version from tag (removes 'v' prefix)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          # Remove 'v' prefix if present
+          VERSION_NUM="${VERSION#v}"
+          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          echo "version_num=$VERSION_NUM" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION (Number: $VERSION_NUM)"
       
-      - name: Create tar archive
+      - name: Verify version in git-pm.py
         run: |
-          # Create archive name with version
-          ARCHIVE_NAME="git-pm-${{ steps.get_version.outputs.version }}.tar.gz"
+          SCRIPT_VERSION=$(grep -oP '__version__ = "\K[^"]+' git-pm.py)
           
-          # Create tar archive in parent directory to avoid "file changed" error
-          tar -czf "../$ARCHIVE_NAME" \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='test-workspace' \
-            --exclude='simple-test' \
-            --exclude='__pycache__' \
-            --exclude='*.pyc' \
-            --exclude='.DS_Store' \
-            .
+          if [ "$SCRIPT_VERSION" != "${{ steps.version.outputs.version_num }}" ]; then
+            echo "❌ Version mismatch!"
+            echo "   Script version: $SCRIPT_VERSION"
+            echo "   Release version: ${{ steps.version.outputs.version_num }}"
+            exit 1
+          fi
           
-          # Move archive back to current directory
-          mv "../$ARCHIVE_NAME" .
+          echo "✅ Version matches: $SCRIPT_VERSION"
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
-          echo "Created archive: $ARCHIVE_NAME"
-          ls -lh "$ARCHIVE_NAME"
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - no previous tag"
+            CHANGELOG="Initial release"
+          else
+            echo "Generating changelog from $PREV_TAG to ${{ steps.version.outputs.version }}"
+            
+            # Generate commit log
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+            
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="No changes since $PREV_TAG"
+            fi
+          fi
           
-          # Save archive name for later steps
-          echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
-        id: create_archive
+          # Save to file
+          echo "$CHANGELOG" > changelog.txt
+          
+          echo "Changelog:"
+          cat changelog.txt
+      
+      - name: Get commit statistics
+        id: stats
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git rev-list ${PREV_TAG}..HEAD --count)
+            FILES_CHANGED=$(git diff --name-only ${PREV_TAG}..HEAD | wc -l)
+            INSERTIONS=$(git diff ${PREV_TAG}..HEAD --shortstat | grep -oP '\d+(?= insertion)')
+            DELETIONS=$(git diff ${PREV_TAG}..HEAD --shortstat | grep -oP '\d+(?= deletion)')
+          else
+            COMMITS=$(git rev-list HEAD --count)
+            FILES_CHANGED="N/A"
+            INSERTIONS="N/A"
+            DELETIONS="N/A"
+          fi
+          
+          echo "commits=$COMMITS" >> $GITHUB_OUTPUT
+          echo "files=$FILES_CHANGED" >> $GITHUB_OUTPUT
+          echo "insertions=${INSERTIONS:-0}" >> $GITHUB_OUTPUT
+          echo "deletions=${DELETIONS:-0}" >> $GITHUB_OUTPUT
       
       - name: Generate release notes
-        id: release_notes
+        id: notes
         run: |
-          cat > release_notes.md << 'EOF'
-          ## git-pm ${{ steps.get_version.outputs.version }}
+          cat > release_notes.md << 'NOTES_EOF'
+          # git-pm ${{ steps.version.outputs.version }} - Git Package Manager
           
-          ### 🚀 Quick Installation (Recommended)
+          ## 🎉 Release Information
           
-          **One-liner:** Download, extract to `git-pm` folder, and cleanup
+          **Version:** ${{ steps.version.outputs.version }}  
+          **Release Date:** $(date +%Y-%m-%d)  
+          **Repository:** [${{ env.REPO_FULL }}](${{ env.REPO_URL }})  
+          **Tag:** [${{ steps.version.outputs.version }}](${{ env.REPO_URL }}/releases/tag/${{ steps.version.outputs.version }})  
           
+          ## 📊 Statistics
+          
+          - **Commits:** ${{ steps.stats.outputs.commits }}
+          - **Files Changed:** ${{ steps.stats.outputs.files }}
+          - **Lines Added:** ${{ steps.stats.outputs.insertions }}
+          - **Lines Removed:** ${{ steps.stats.outputs.deletions }}
+          
+          ## ✨ What's New
+          
+          ### Full Dependency Resolution
+          - Automatic recursive dependency discovery
+          - Reads `git-pm.yaml` from each package
+          - Topological sorting (dependencies first)
+          - Complete dependency tree in lockfile
+          - Opt-out with `--no-resolve-deps` flag
+          
+          ### Branch Auto-Resolution
+          - Branches automatically resolve to latest commit SHA
+          - All references to same branch use same commit
+          - `git-pm update` pulls latest commits for branches
+          - Deterministic installs via lockfile
+          
+          ### Global Installation
+          - **Linux/macOS:** Installs to `~/.local/bin/git-pm.py`
+          - **Windows:** Installs to `%USERPROFILE%\.git-pm\git-pm.py`
+          - Automatic PATH configuration
+          - Works from any directory
+          - Command wrappers for convenience
+          
+          ### Enhanced Local Development
+          - Local overrides now use **symlinks** instead of copying
+          - Live updates during development
+          - Faster iteration cycle
+          
+          ### Azure DevOps Integration
+          - Built-in PAT token injection via `AZURE_DEVOPS_PAT` env var
+          - Works seamlessly in Azure Pipelines
+          - No code changes needed for different auth methods
+          
+          ## 🚀 Quick Start
+          
+          ### Installation
+          
+          **Linux/macOS:**
           ```bash
-          curl -L -o git-pm.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.tag }}/git-pm-${{ steps.get_version.outputs.version }}.tar.gz && mkdir -p git-pm && tar -xzf git-pm.tar.gz -C git-pm --strip-components=1 && rm git-pm.tar.gz
+          curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash
           ```
           
-          **Verify installation:**
-          ```bash
-          cd git-pm
-          python git-pm.py --version
+          **Windows (PowerShell):**
+          ```powershell
+          irm ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.ps1 | iex
           ```
           
-          ### 📦 What's Included
-          
-          - `git-pm.py` - Main Python script (zero dependencies, stdlib only)
-          - `simple-test.sh` - Quick validation test
-          - `test-git-pm.sh` - Comprehensive test suite
-          - Complete documentation (README.md, QUICKSTART.md, ADD_COMMAND.md, etc.)
-          - Example configurations in `examples/` directory
-          - Default configuration template
-          
-          ### 📋 Alternative Installation
-          
-          <details>
-          <summary>Step-by-step installation</summary>
-          
-          1. Download and extract the archive:
-             ```bash
-             wget https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.tag }}/git-pm-${{ steps.get_version.outputs.version }}.tar.gz
-             tar -xzf git-pm-${{ steps.get_version.outputs.version }}.tar.gz
-             cd git-pm-${{ steps.get_version.outputs.version }}
-             ```
-          
-          2. Run the simple test:
-             ```bash
-             chmod +x simple-test.sh
-             ./simple-test.sh
-             ```
-          
-          3. Start using git-pm:
-             ```bash
-             python git-pm.py --version
-             ```
-          </details>
-          
-          ### ✅ Requirements
-          
-          - Python 3.7 or higher
-          - Git command-line tool
-          - No external dependencies required (pure Python stdlib)
-          
-          ### 🎯 Quick Start
+          ### Usage
           
           ```bash
-          # Add a package
-          python git-pm.py add utils github.com/company/monorepo --path packages/utils
+          # Add packages
+          git-pm add utils github.com/company/monorepo --path packages/utils --ref-type tag --ref-value v1.0.0
           
-          # Install packages
-          python git-pm.py install
+          # Install with dependency resolution
+          git-pm install
           
-          # List installed packages
-          python git-pm.py list
+          # Update branch-based packages
+          git-pm update
+          
+          # List installed
+          git-pm list
           ```
           
-          See `QUICKSTART.md` and `ADD_COMMAND.md` for detailed instructions.
+          ## 📋 Requirements
           
-          ### 📚 Documentation
+          - Python 3.7+
+          - git
+          - Internet connection (for initial install)
           
-          - `README.md` - Full documentation
-          - `QUICKSTART.md` - Getting started guide
-          - `ADD_COMMAND.md` - Add command reference
-          - `DOCUMENTATION.md` - Design details
-          - `REFERENCE.md` - Quick reference card
-          - `examples/` - Configuration examples
+          ## 📝 Changelog
           
-          ### 🧪 Testing
+          $(cat changelog.txt)
           
+          ## 🔄 Migration from Previous Versions
+          
+          ### Breaking Changes
+          1. **Global installation required** - Script no longer in project directory
+          2. **Dependency resolution on by default** - Use `--no-resolve-deps` to disable
+          3. **Local overrides use symlinks** - Faster, live updates
+          
+          ### Migration Steps
           ```bash
-          # Quick test
-          ./simple-test.sh
+          # 1. Install globally
+          curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash
           
-          # Comprehensive test suite
-          ./test-git-pm.sh all
+          # 2. Remove old script from project (optional)
+          rm git-pm.py
+          
+          # 3. Works from anywhere now!
+          cd your-project
+          git-pm install
           ```
+          
+          ## 📥 Assets
+          
+          - **git-pm.py** - Main Python script (required by installers)
+          - **install-git-pm.sh** - Linux/macOS installer
+          - **install-git-pm.ps1** - Windows installer
+          
+          **Download URL:**
+          ```
+          ${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py
+          ```
+          
+          **Commands after installation:**
+          - `git-pm install` (via wrapper)
+          - `git-pm.py install` (direct)
+          - `python git-pm.py install` (explicit)
+          
+          ## 🐛 Known Issues
+          
+          - PATH update may require terminal restart
+          - Windows installer requires PowerShell 5.0+
+          
+          ## 📚 Documentation
+          
+          - [README.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/README.md)
+          - [DEPENDENCY_RESOLUTION.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/DEPENDENCY_RESOLUTION.md)
+          - [Repository](${{ env.REPO_URL }})
+          
+          ## 🙏 Feedback
+          
+          Please report issues at: [${{ env.REPO_FULL }}/issues](${{ env.REPO_URL }}/issues)
+          
+          ## 🎓 Examples
+          
+          ### Terraform Modules
+          ```yaml
+          packages:
+            azure-bootstrap:
+              repo: dev.azure.com/org/terraform
+              path: modules/bootstrap
+              ref:
+                type: tag
+                value: v1.0.0
+          ```
+          
+          ### Shared Libraries
+          ```yaml
+          packages:
+            common-utils:
+              repo: github.com/company/shared-libs
+              path: utils
+              ref:
+                type: branch
+                value: main
+          ```
+          
+          ### Bitbucket Support
+          ```yaml
+          packages:
+            my-lib:
+              repo: bitbucket.org/workspace/repository
+              path: packages/my-lib
+              ref:
+                type: tag
+                value: v1.0.0
+          ```
+          
+          ## ✅ What's Included
+          
+          ✅ **Full Dependency Resolution** - Automatic recursive discovery  
+          ✅ **Explicit Versioning** - No ranges, exact tags/branches/commits  
+          ✅ **Branch Auto-Resolution** - Branches → latest commit SHA  
+          ✅ **Independent Versioning** - Each package at different commits  
+          ✅ **Symlink Local Overrides** - Fast live development  
+          ✅ **Azure DevOps PAT** - Built-in token support  
+          ✅ **Cross-Platform** - Linux, macOS, Windows  
+          ✅ **Zero Dependencies** - Pure Python 3.7+  
+          ✅ **Smart Caching** - Fast repeated installs  
           
           ---
           
-          **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.tag }}
-          EOF
+          **Released by:** @${{ github.actor }}  
+          **Commit:** [${{ github.sha }}](${{ env.REPO_URL }}/commit/${{ github.sha }})
+          NOTES_EOF
           
+          # Replace placeholders
+          sed -i "s/\${{ steps.version.outputs.version }}/${{ steps.version.outputs.version }}/g" release_notes.md
+          sed -i "s/\$(date +%Y-%m-%d)/$(date +%Y-%m-%d)/g" release_notes.md
+          sed -i "s/\${{ env.REPO_FULL }}/${{ env.REPO_FULL }}/g" release_notes.md
+          sed -i "s|\${{ env.REPO_URL }}|${{ env.REPO_URL }}|g" release_notes.md
+          sed -i "s/\${{ github.ref_name }}/${{ github.ref_name }}/g" release_notes.md
+          sed -i "s/\${{ steps.stats.outputs.commits }}/${{ steps.stats.outputs.commits }}/g" release_notes.md
+          sed -i "s/\${{ steps.stats.outputs.files }}/${{ steps.stats.outputs.files }}/g" release_notes.md
+          sed -i "s/\${{ steps.stats.outputs.insertions }}/${{ steps.stats.outputs.insertions }}/g" release_notes.md
+          sed -i "s/\${{ steps.stats.outputs.deletions }}/${{ steps.stats.outputs.deletions }}/g" release_notes.md
+          sed -i "s/\${{ github.actor }}/${{ github.actor }}/g" release_notes.md
+          sed -i "s/\${{ github.sha }}/${{ github.sha }}/g" release_notes.md
+          
+          echo "Release notes generated:"
           cat release_notes.md
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Release ${{ steps.get_version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: git-pm ${{ steps.version.outputs.version }}
           body_path: release_notes.md
-          files: ${{ steps.create_archive.outputs.archive_name }}
           draft: false
           prerelease: false
+          files: |
+            git-pm.py
+            install-git-pm.sh
+            install-git-pm.ps1
+            README.md
+            DEPENDENCY_RESOLUTION.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Upload artifact (for debugging)
-        uses: actions/upload-artifact@v4
-        with:
-          name: git-pm-${{ steps.get_version.outputs.version }}
-          path: ${{ steps.create_archive.outputs.archive_name }}
-          retention-days: 90
+      - name: Verify release
+        run: |
+          echo "✅ Release ${{ steps.version.outputs.version }} created successfully!"
+          echo ""
+          echo "Release URL: ${{ env.REPO_URL }}/releases/tag/${{ steps.version.outputs.version }}"
+          echo ""
+          echo "Installation command (Linux/macOS):"
+          echo "curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash"
+          echo ""
+          echo "Installation command (Windows):"
+          echo "irm ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.ps1 | iex"
+          echo ""
+          echo "Download URL:"
+          echo "${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py"
+
+  test-installation:
+    name: Test Release Installation
+    needs: create-release
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Wait for release to be available
+        shell: bash
+        run: |
+          echo "Waiting for release to be available..."
+          sleep 30
+      
+      - name: Test Linux/macOS installation
+        if: runner.os != 'Windows'
+        run: |
+          # Test direct download
+          curl -fsSL ${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py -o git-pm.py
+          
+          # Verify downloaded
+          if [ -f git-pm.py ]; then
+            echo "✅ Downloaded git-pm.py"
+          else
+            echo "❌ Failed to download git-pm.py"
+            exit 1
+          fi
+          
+          # Test version
+          python3 git-pm.py --version
+          
+          echo "✅ Release installation test passed on ${{ runner.os }}"
+      
+      - name: Test Windows installation
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          # Test direct download
+          Invoke-WebRequest -Uri "${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py" -OutFile git-pm.py
+          
+          # Verify downloaded
+          if (Test-Path git-pm.py) {
+            Write-Host "✅ Downloaded git-pm.py"
+          } else {
+            Write-Host "❌ Failed to download git-pm.py"
+            exit 1
+          }
+          
+          # Test version
+          python git-pm.py --version
+          
+          Write-Host "✅ Release installation test passed on Windows"
