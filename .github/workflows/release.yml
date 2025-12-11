@@ -110,7 +110,7 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
-          cat > release_notes.md << 'NOTES_EOF'
+          cat > release_notes.md << NOTES_EOF
           # git-pm ${{ steps.version.outputs.version }} - Git Package Manager
           
           ## 🎉 Release Information
@@ -131,20 +131,20 @@ jobs:
           
           ### Full Dependency Resolution
           - Automatic recursive dependency discovery
-          - Reads `git-pm.yaml` from each package
+          - Reads \\`git-pm.yaml\\` from each package
           - Topological sorting (dependencies first)
           - Complete dependency tree in lockfile
-          - Opt-out with `--no-resolve-deps` flag
+          - Opt-out with \`--no-resolve-deps\` flag
           
           ### Branch Auto-Resolution
           - Branches automatically resolve to latest commit SHA
           - All references to same branch use same commit
-          - `git-pm update` pulls latest commits for branches
+          - \`git-pm update\` pulls latest commits for branches
           - Deterministic installs via lockfile
           
           ### Global Installation
-          - **Linux/macOS:** Installs to `~/.local/bin/git-pm.py`
-          - **Windows:** Installs to `%USERPROFILE%\.git-pm\git-pm.py`
+          - **Linux/macOS:** Installs to \`~/.local/bin/git-pm.py\`
+          - **Windows:** Installs to \`%USERPROFILE%\.git-pm\git-pm.py\`
           - Automatic PATH configuration
           - Works from any directory
           - Command wrappers for convenience
@@ -155,7 +155,7 @@ jobs:
           - Faster iteration cycle
           
           ### Azure DevOps Integration
-          - Built-in PAT token injection via `AZURE_DEVOPS_PAT` env var
+          - Built-in PAT token injection via \`AZURE_DEVOPS_PAT\` env var
           - Works seamlessly in Azure Pipelines
           - No code changes needed for different auth methods
           
@@ -164,18 +164,18 @@ jobs:
           ### Installation
           
           **Linux/macOS:**
-          ```bash
+          \`\`\`bash
           curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash
-          ```
+          \`\`\`
           
           **Windows (PowerShell):**
-          ```powershell
+          \`\`\`powershell
           irm ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.ps1 | iex
-          ```
+          \`\`\`
           
           ### Usage
           
-          ```bash
+          \`\`\`bash
           # Add packages
           git-pm add utils github.com/company/monorepo --path packages/utils --ref-type tag --ref-value v1.0.0
           
@@ -187,11 +187,11 @@ jobs:
           
           # List installed
           git-pm list
-          ```
+          \`\`\`
           
           ## 📋 Requirements
           
-          - Python 3.7+
+          - Python 3.8+
           - git
           - Internet connection (for initial install)
           
@@ -203,11 +203,11 @@ jobs:
           
           ### Breaking Changes
           1. **Global installation required** - Script no longer in project directory
-          2. **Dependency resolution on by default** - Use `--no-resolve-deps` to disable
+          2. **Dependency resolution on by default** - Use \`--no-resolve-deps\` to disable
           3. **Local overrides use symlinks** - Faster, live updates
           
           ### Migration Steps
-          ```bash
+          \`\`\`bash
           # 1. Install globally
           curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash
           
@@ -217,7 +217,7 @@ jobs:
           # 3. Works from anywhere now!
           cd your-project
           git-pm install
-          ```
+          \`\`\`
           
           ## 📥 Assets
           
@@ -226,14 +226,14 @@ jobs:
           - **install-git-pm.ps1** - Windows installer
           
           **Download URL:**
-          ```
+          \`\`\`
           ${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py
-          ```
+          \`\`\`
           
           **Commands after installation:**
-          - `git-pm install` (via wrapper)
-          - `git-pm.py install` (direct)
-          - `python git-pm.py install` (explicit)
+          - \`git-pm install\` (via wrapper)
+          - \`git-pm.py install\` (direct)
+          - \`python git-pm.py install\` (explicit)
           
           ## 🐛 Known Issues
           
@@ -253,7 +253,7 @@ jobs:
           ## 🎓 Examples
           
           ### Terraform Modules
-          ```yaml
+          \`\`\`yaml
           packages:
             azure-bootstrap:
               repo: dev.azure.com/org/terraform
@@ -261,10 +261,10 @@ jobs:
               ref:
                 type: tag
                 value: v1.0.0
-          ```
+          \`\`\`
           
           ### Shared Libraries
-          ```yaml
+          \`\`\`yaml
           packages:
             common-utils:
               repo: github.com/company/shared-libs
@@ -272,10 +272,10 @@ jobs:
               ref:
                 type: branch
                 value: main
-          ```
+          \`\`\`
           
           ### Bitbucket Support
-          ```yaml
+          \`\`\`yaml
           packages:
             my-lib:
               repo: bitbucket.org/workspace/repository
@@ -283,7 +283,7 @@ jobs:
               ref:
                 type: tag
                 value: v1.0.0
-          ```
+          \`\`\`
           
           ## ✅ What's Included
           
@@ -294,7 +294,7 @@ jobs:
           ✅ **Symlink Local Overrides** - Fast live development  
           ✅ **Azure DevOps PAT** - Built-in token support  
           ✅ **Cross-Platform** - Linux, macOS, Windows  
-          ✅ **Zero Dependencies** - Pure Python 3.7+  
+          ✅ **Zero Dependencies** - Pure Python 3.8+  
           ✅ **Smart Caching** - Fast repeated installs  
           
           ---
@@ -302,19 +302,6 @@ jobs:
           **Released by:** @${{ github.actor }}  
           **Commit:** [${{ github.sha }}](${{ env.REPO_URL }}/commit/${{ github.sha }})
           NOTES_EOF
-          
-          # Replace placeholders
-          sed -i "s/\${{ steps.version.outputs.version }}/${{ steps.version.outputs.version }}/g" release_notes.md
-          sed -i "s/\$(date +%Y-%m-%d)/$(date +%Y-%m-%d)/g" release_notes.md
-          sed -i "s/\${{ env.REPO_FULL }}/${{ env.REPO_FULL }}/g" release_notes.md
-          sed -i "s|\${{ env.REPO_URL }}|${{ env.REPO_URL }}|g" release_notes.md
-          sed -i "s/\${{ github.ref_name }}/${{ github.ref_name }}/g" release_notes.md
-          sed -i "s/\${{ steps.stats.outputs.commits }}/${{ steps.stats.outputs.commits }}/g" release_notes.md
-          sed -i "s/\${{ steps.stats.outputs.files }}/${{ steps.stats.outputs.files }}/g" release_notes.md
-          sed -i "s/\${{ steps.stats.outputs.insertions }}/${{ steps.stats.outputs.insertions }}/g" release_notes.md
-          sed -i "s/\${{ steps.stats.outputs.deletions }}/${{ steps.stats.outputs.deletions }}/g" release_notes.md
-          sed -i "s/\${{ github.actor }}/${{ github.actor }}/g" release_notes.md
-          sed -i "s/\${{ github.sha }}/${{ github.sha }}/g" release_notes.md
           
           echo "Release notes generated:"
           cat release_notes.md
