@@ -7,13 +7,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-env:
-  PYTHON_VERSION: '3.7'
-
 jobs:
   test-dependency-resolution:
     name: Test Dependency Resolution
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
       - name: Checkout repository
@@ -22,7 +19,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.8'
       
       - name: Setup test environment
         run: |
@@ -307,7 +304,7 @@ jobs:
     name: Test Global Installation
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -317,7 +314,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.8'
       
       - name: Test installer script
         run: |
@@ -443,7 +440,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.8'
       
       - name: Test Windows installer
         shell: powershell
@@ -542,8 +539,8 @@ jobs:
     name: Test Python Compatibility
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
-    runs-on: ubuntu-22.04
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    runs-on: ubuntu-22.04  # Use Ubuntu 22.04 for older Python support
     
     steps:
       - name: Checkout repository
@@ -588,7 +585,7 @@ jobs:
 
   lint-and-syntax:
     name: Lint and Syntax Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
       - name: Checkout repository
