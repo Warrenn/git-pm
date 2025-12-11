@@ -2,43 +2,48 @@ name: CI Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: "3.10"
+  PYTHON_VERSION: '3.7'
 
 jobs:
   test-dependency-resolution:
     name: Test Dependency Resolution
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
+      
       - name: Setup test environment
         run: |
           mkdir -p test-workspace
           cd test-workspace
-
+          
           # Create mock monorepo structure
           git init --bare mock-repo.git
-
+          
           # Create working directory
           git clone mock-repo.git mock-repo-work
           cd mock-repo-work
-
+          
+          # Configure git to use main branch
+          git config init.defaultBranch main
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          
           # Create package structure with nested dependencies
           mkdir -p packages/{base,utils,api}
-
+          
           # Base package (no dependencies)
           cat > packages/base/git-pm.yaml << 'EOF'
           packages: {}
@@ -47,7 +52,7 @@ jobs:
           def base_func():
               return "base"
           EOF
-
+          
           # Utils package (depends on base)
           cat > packages/utils/git-pm.yaml << EOF
           packages:
@@ -62,7 +67,7 @@ jobs:
           def utils_func():
               return "utils"
           EOF
-
+          
           # API package (depends on utils and base)
           cat > packages/api/git-pm.yaml << EOF
           packages:
@@ -83,25 +88,27 @@ jobs:
           def api_func():
               return "api"
           EOF
-
-          # Commit and push
-          git config user.email "test@example.com"
-          git config user.name "Test User"
+          
+          # Commit and push to main branch
           git add .
           git commit -m "Initial commit with nested packages"
+          
+          # Rename branch to main (in case git used master)
+          git branch -M main
+          
           git push origin main
-
+          
           cd ../..
-
+      
       - name: Test nested dependency discovery
         run: |
           cd test-workspace
           mkdir test-project-nested
           cd test-project-nested
-
+          
           # Copy git-pm.py
           cp ${{ github.workspace }}/git-pm.py .
-
+          
           # Create manifest that only references api (should auto-discover utils and base)
           cat > git-pm.yaml << EOF
           packages:
@@ -112,30 +119,30 @@ jobs:
                 type: branch
                 value: main
           EOF
-
+          
           # Run install with dependency resolution
           echo "Testing dependency resolution..."
           python3 git-pm.py install
-
+          
           # Verify all 3 packages were installed
           echo "Verifying packages..."
           if [ ! -d ".git-packages/base" ]; then
             echo "❌ Base package not installed"
             exit 1
           fi
-
+          
           if [ ! -d ".git-packages/utils" ]; then
             echo "❌ Utils package not installed"
             exit 1
           fi
-
+          
           if [ ! -d ".git-packages/api" ]; then
             echo "❌ API package not installed"
             exit 1
           fi
-
+          
           echo "✅ All nested dependencies installed"
-
+          
           # Verify installation order in lockfile
           echo "Verifying installation order..."
           python3 -c "
@@ -144,34 +151,34 @@ jobs:
               lock = json.load(f)
           order = lock.get('installation_order', [])
           print(f'Installation order: {order}')
-
+          
           # Base should be first (no dependencies)
           # Utils should be after base
           # API should be last (depends on both)
           base_idx = order.index('base')
           utils_idx = order.index('utils')
           api_idx = order.index('api')
-
+          
           assert base_idx < utils_idx, 'Base should be installed before utils'
           assert utils_idx < api_idx, 'Utils should be installed before api'
           assert base_idx < api_idx, 'Base should be installed before api'
           print('✅ Installation order correct')
           "
-
+          
           # Verify all files exist
           echo "Verifying package files..."
           test -f .git-packages/base/base.py || (echo "❌ Base file missing" && exit 1)
           test -f .git-packages/utils/utils.py || (echo "❌ Utils file missing" && exit 1)
           test -f .git-packages/api/api.py || (echo "❌ API file missing" && exit 1)
           echo "✅ All package files present"
-
+      
       - name: Test circular dependency detection
         run: |
           cd test-workspace/mock-repo-work
-
+          
           # Create circular dependency: pkg-a -> pkg-b -> pkg-a
           mkdir -p packages/{pkg-a,pkg-b}
-
+          
           cat > packages/pkg-a/git-pm.yaml << EOF
           packages:
             pkg-b:
@@ -181,7 +188,7 @@ jobs:
                 type: branch
                 value: circular
           EOF
-
+          
           cat > packages/pkg-b/git-pm.yaml << EOF
           packages:
             pkg-a:
@@ -191,15 +198,17 @@ jobs:
                 type: branch
                 value: circular
           EOF
-
+          
           git checkout -b circular
           git add packages/pkg-a packages/pkg-b
           git commit -m "Add circular dependencies"
           git push origin circular
-
-          cd ../../test-project-circular
+          
+          cd ../..
+          mkdir -p test-project-circular
+          cd test-project-circular
           cp ${{ github.workspace }}/git-pm.py .
-
+          
           cat > git-pm.yaml << EOF
           packages:
             pkg-a:
@@ -209,7 +218,7 @@ jobs:
                 type: branch
                 value: circular
           EOF
-
+          
           echo "Testing circular dependency detection..."
           # Should fail with circular dependency error
           if python3 git-pm.py install 2>&1 | grep -q "Circular dependency"; then
@@ -218,15 +227,15 @@ jobs:
             echo "❌ Circular dependency not detected"
             exit 1
           fi
-
+      
       - name: Test branch resolution
         run: |
           cd test-workspace
           mkdir test-branch-resolution
           cd test-branch-resolution
-
+          
           cp ${{ github.workspace }}/git-pm.py .
-
+          
           cat > git-pm.yaml << EOF
           packages:
             base:
@@ -236,36 +245,36 @@ jobs:
                 type: branch
                 value: main
           EOF
-
+          
           echo "Testing branch resolution..."
           python3 git-pm.py install
-
+          
           # Verify branch was resolved to commit in lockfile
           python3 -c "
           import json
           with open('git-pm.lock') as f:
               lock = json.load(f)
-
+          
           base = lock['packages']['base']
-
+          
           # Should have both ref (resolved commit) and original_ref (branch)
           assert base['ref']['type'] == 'commit', 'Branch should be resolved to commit'
           assert 'value' in base['ref'], 'Should have commit SHA'
           assert base.get('original_ref', {}).get('type') == 'branch', 'Should preserve original branch reference'
           assert base.get('original_ref', {}).get('value') == 'main', 'Should preserve branch name'
-
+          
           print(f\"✅ Branch resolved to commit: {base['ref']['value'][:8]}\")
           print(f\"✅ Original branch preserved: {base['original_ref']['value']}\")
           "
-
+      
       - name: Test flat install (no dependency resolution)
         run: |
           cd test-workspace
           mkdir test-flat-install
           cd test-flat-install
-
+          
           cp ${{ github.workspace }}/git-pm.py .
-
+          
           cat > git-pm.yaml << EOF
           packages:
             api:
@@ -275,10 +284,10 @@ jobs:
                 type: branch
                 value: main
           EOF
-
+          
           echo "Testing flat install (--no-resolve-deps)..."
           python3 git-pm.py install --no-resolve-deps
-
+          
           # Should only install api, not dependencies
           if [ -d ".git-packages/api" ]; then
             echo "✅ API package installed"
@@ -286,43 +295,43 @@ jobs:
             echo "❌ API package not installed"
             exit 1
           fi
-
+          
           if [ -d ".git-packages/utils" ] || [ -d ".git-packages/base" ]; then
             echo "❌ Dependencies should not be installed with --no-resolve-deps"
             exit 1
           fi
-
+          
           echo "✅ Flat install worked correctly"
 
   test-global-installation:
     name: Test Global Installation
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
+      
       - name: Test installer script
         run: |
           echo "Testing installer on ${{ matrix.os }}..."
-
+          
           # Make installer executable
           chmod +x install-git-pm.sh
-
+          
           # Run installer (non-interactive)
           bash install-git-pm.sh <<< "n"
-
+          
           # Verify installation
           echo "Verifying installation..."
-
+          
           # Check if script was installed
           if [ -f "$HOME/.local/bin/git-pm.py" ]; then
             echo "✅ git-pm.py installed to correct location"
@@ -330,7 +339,7 @@ jobs:
             echo "❌ git-pm.py not found at $HOME/.local/bin/git-pm.py"
             exit 1
           fi
-
+          
           # Check if wrapper was created
           if [ -f "$HOME/.local/bin/git-pm" ]; then
             echo "✅ Wrapper script created"
@@ -338,7 +347,7 @@ jobs:
             echo "❌ Wrapper script not found"
             exit 1
           fi
-
+          
           # Check if executable
           if [ -x "$HOME/.local/bin/git-pm.py" ]; then
             echo "✅ git-pm.py is executable"
@@ -346,13 +355,13 @@ jobs:
             echo "❌ git-pm.py is not executable"
             exit 1
           fi
-
+          
           # Add to PATH for testing
           export PATH="$HOME/.local/bin:$PATH"
-
+          
           # Test all 3 invocation methods
           echo "Testing invocation methods..."
-
+          
           # Method 1: Via wrapper
           if git-pm --version 2>&1 | grep -q "git-pm 0.2.0"; then
             echo "✅ Wrapper command works: git-pm"
@@ -360,7 +369,7 @@ jobs:
             echo "❌ Wrapper command failed"
             exit 1
           fi
-
+          
           # Method 2: Direct script (with PATH)
           if git-pm.py --version 2>&1 | grep -q "git-pm 0.2.0"; then
             echo "✅ Direct command works: git-pm.py"
@@ -368,7 +377,7 @@ jobs:
             echo "❌ Direct command failed"
             exit 1
           fi
-
+          
           # Method 3: Explicit Python
           if python3 git-pm.py --version 2>&1 | grep -q "git-pm 0.2.0"; then
             echo "✅ Python invocation works: python3 git-pm.py"
@@ -376,15 +385,15 @@ jobs:
             echo "❌ Python invocation failed"
             exit 1
           fi
-
+      
       - name: Test global command with real project
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-
+          
           # Create test project
           mkdir -p test-global-project
           cd test-global-project
-
+          
           # Create simple manifest
           cat > git-pm.yaml << EOF
           packages:
@@ -395,11 +404,11 @@ jobs:
                 type: commit
                 value: ${{ github.sha }}
           EOF
-
+          
           # Test install with global command
           echo "Testing global git-pm install..."
           git-pm install --no-resolve-deps
-
+          
           # Verify lockfile created
           if [ -f "git-pm.lock" ]; then
             echo "✅ Lockfile created by global command"
@@ -407,15 +416,15 @@ jobs:
             echo "❌ Lockfile not created"
             exit 1
           fi
-
+          
           # Test list command
           echo "Testing global git-pm list..."
           git-pm list
-
+          
           # Test clean command
           echo "Testing global git-pm clean..."
           git-pm clean
-
+          
           if [ ! -d ".git-packages" ]; then
             echo "✅ Clean command worked"
           else
@@ -423,33 +432,139 @@ jobs:
             exit 1
           fi
 
+  test-windows-installation:
+    name: Test Windows Installation
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Test Windows installer
+        shell: powershell
+        run: |
+          Write-Host "Testing Windows installer..."
+          
+          # Run installer (simulated)
+          # Note: Can't actually run the full installer in CI without user interaction
+          # So we'll simulate the key parts
+          
+          $InstallDir = "$env:USERPROFILE\.git-pm"
+          New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+          
+          # Copy script
+          Copy-Item git-pm.py "$InstallDir\git-pm.py"
+          
+          # Create batch wrapper
+          $batContent = @"
+          @echo off
+          python "%~dp0git-pm.py" %*
+          "@
+          Set-Content -Path "$InstallDir\git-pm.bat" -Value $batContent
+          
+          # Add to PATH for this session
+          $env:Path += ";$InstallDir"
+          
+          # Test invocations
+          Write-Host "Testing invocation methods..."
+          
+          # Method 1: Batch wrapper
+          $version = & git-pm --version 2>&1
+          if ($version -match "git-pm 0.2.0") {
+            Write-Host "✅ Batch wrapper works: git-pm"
+          } else {
+            Write-Host "❌ Batch wrapper failed"
+            exit 1
+          }
+          
+          # Method 2: Python direct
+          $version = python "$InstallDir\git-pm.py" --version 2>&1
+          if ($version -match "git-pm 0.2.0") {
+            Write-Host "✅ Python invocation works"
+          } else {
+            Write-Host "❌ Python invocation failed"
+            exit 1
+          }
+      
+      - name: Test Windows command with project
+        shell: powershell
+        run: |
+          $InstallDir = "$env:USERPROFILE\.git-pm"
+          $env:Path += ";$InstallDir"
+          
+          # Create test project
+          New-Item -ItemType Directory -Path test-windows-project -Force | Out-Null
+          Set-Location test-windows-project
+          
+          # Create manifest
+          $manifest = @"
+          packages:
+            test:
+              repo: ${{ github.server_url }}/${{ github.repository }}
+              path: .
+              ref:
+                type: commit
+                value: ${{ github.sha }}
+          "@
+          Set-Content -Path "git-pm.yaml" -Value $manifest
+          
+          # Test install
+          Write-Host "Testing git-pm install on Windows..."
+          git-pm install --no-resolve-deps
+          
+          # Verify lockfile
+          if (Test-Path "git-pm.lock") {
+            Write-Host "✅ Lockfile created"
+          } else {
+            Write-Host "❌ Lockfile not created"
+            exit 1
+          }
+          
+          # Test list
+          git-pm list
+          
+          # Test clean
+          git-pm clean
+          
+          if (-not (Test-Path ".git-packages")) {
+            Write-Host "✅ Clean command worked"
+          } else {
+            Write-Host "❌ Clean command failed"
+            exit 1
+          }
+
   test-python-versions:
     name: Test Python Compatibility
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-
+      
       - name: Test basic functionality
         run: |
           echo "Testing with Python ${{ matrix.python-version }}..."
-
+          
           # Test version
           python git-pm.py --version
-
+          
           # Create simple test
           mkdir test-py${{ matrix.python-version }}
           cd test-py${{ matrix.python-version }}
-
+          
           cat > git-pm.yaml << EOF
           packages:
             test:
@@ -459,10 +574,10 @@ jobs:
                 type: commit
                 value: ${{ github.sha }}
           EOF
-
+          
           # Test install
           python ../git-pm.py install --no-resolve-deps
-
+          
           # Verify success
           if [ -f "git-pm.lock" ]; then
             echo "✅ Python ${{ matrix.python-version }} compatible"
@@ -474,21 +589,21 @@ jobs:
   lint-and-syntax:
     name: Lint and Syntax Check
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.12"
-
+          python-version: '3.12'
+      
       - name: Check Python syntax
         run: |
           python -m py_compile git-pm.py
           echo "✅ Python syntax valid"
-
+      
       - name: Check shebang
         run: |
           if head -n 1 git-pm.py | grep -q "^#!/usr/bin/env python3"; then
@@ -497,7 +612,7 @@ jobs:
             echo "❌ Shebang missing or incorrect"
             exit 1
           fi
-
+      
       - name: Check shell scripts
         run: |
           bash -n install-git-pm.sh
