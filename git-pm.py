@@ -19,6 +19,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Fix Windows encoding issues with Unicode characters (emojis)
+if sys.platform == 'win32':
+    # Set UTF-8 encoding for stdout and stderr
+    import io
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 __version__ = "0.2.0"
 
 
