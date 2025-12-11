@@ -4,6 +4,7 @@ git-pm: Git Package Manager
 A package manager that uses git sparse-checkout to manage dependencies with full dependency resolution.
 
 Version 0.2.0 - Full dependency resolution with explicit versions
+Requires Python 3.8+ (3.7 may work but is not tested)
 """
 
 import argparse
@@ -54,6 +55,20 @@ class SimpleYAML:
                 key, _, value = line.partition(':')
                 key = key.strip()
                 value = value.strip()
+                
+                # Handle inline empty dict/list
+                if value == '{}':
+                    while len(stack) > 1 and stack[-1][1] >= indent:
+                        stack.pop()
+                    parent_dict = stack[-1][0]
+                    parent_dict[key] = {}
+                    continue
+                elif value == '[]':
+                    while len(stack) > 1 and stack[-1][1] >= indent:
+                        stack.pop()
+                    parent_dict = stack[-1][0]
+                    parent_dict[key] = []
+                    continue
                 
                 if value.startswith('"') and value.endswith('"'):
                     value = value[1:-1]
@@ -422,6 +437,11 @@ class GitPM:
         if parent_chain is None:
             parent_chain = []
         
+        # Type check
+        if not isinstance(packages, dict):
+            print("  ✗ Error: packages must be a dictionary, got {}".format(type(packages).__name__))
+            return {}
+        
         all_discovered = {}
         
         for name, config in packages.items():
@@ -484,6 +504,11 @@ class GitPM:
                 with open(pkg_manifest_path, 'r') as f:
                     pkg_data = SimpleYAML.load(f)
                     nested_deps = pkg_data.get("packages", {})
+                
+                # Defensive: ensure nested_deps is a dict
+                if not isinstance(nested_deps, dict):
+                    print("{}  ⚠️  Warning: packages field is not a dictionary, treating as empty".format("  " * depth))
+                    nested_deps = {}
                 
                 if nested_deps:
                     print("{}  Found {} dependencies".format("  " * depth, len(nested_deps)))
