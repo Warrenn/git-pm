@@ -58,7 +58,7 @@ function Test-PythonInstalled {
                 $major = [int]$versionParts[0]
                 $minor = [int]$versionParts[1]
                 
-                if ($major -eq 3 -and $minor -ge 7) {
+                if ($major -eq 3 -and $minor -ge 8) {
                     $script:PythonCmd = $cmd
                     Write-ColorOutput "Python $version found ($cmd)" "Success"
                     return $true
@@ -69,9 +69,9 @@ function Test-PythonInstalled {
         }
     }
     
-    Write-ColorOutput "Python 3.7 or higher is required" "Error"
+    Write-ColorOutput "Python 3.8 or higher is required" "Error"
     Write-Host ""
-    Write-Host "Please install Python 3.7+ from:"
+    Write-Host "Please install Python 3.8+ from:"
     Write-Host "  https://www.python.org/downloads/"
     Write-Host ""
     Write-Host "Make sure to check 'Add Python to PATH' during installation"

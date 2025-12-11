@@ -51,7 +51,7 @@ check_python() {
             major=$(echo "$version" | cut -d. -f1)
             minor=$(echo "$version" | cut -d. -f2)
             
-            if [ "$major" -eq 3 ] && [ "$minor" -ge 7 ]; then
+            if [ "$major" -eq 3 ] && [ "$minor" -ge 8 ]; then
                 PYTHON_CMD="$cmd"
                 print_success "Python $version found ($cmd)"
                 return 0
@@ -59,8 +59,8 @@ check_python() {
         fi
     done
     
-    print_error "Python 3.7 or higher is required"
-    echo "Please install Python 3.7+:"
+    print_error "Python 3.8 or higher is required"
+    echo "Please install Python 3.8+:"
     echo "  macOS: brew install python3"
     echo "  Ubuntu/Debian: sudo apt install python3"
     echo "  Fedora/RHEL: sudo dnf install python3"
