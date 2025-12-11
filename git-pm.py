@@ -777,12 +777,31 @@ class GitPM:
         print("✅ Updated {} package(s)".format(updated))
         return 0
     
+    def _rmtree_windows_safe(self, path):
+        """Remove directory tree, handling Windows read-only files"""
+        def handle_remove_readonly(func, path, exc):
+            """Error handler for Windows read-only files"""
+            import stat
+            if not os.access(path, os.W_OK):
+                # File is read-only, try to make it writable
+                os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+                func(path)
+            else:
+                raise
+        
+        if sys.platform == 'win32':
+            # On Windows, use error handler for read-only files
+            shutil.rmtree(path, onerror=handle_remove_readonly)
+        else:
+            # On Unix, standard rmtree works fine
+            shutil.rmtree(path)
+    
     def cmd_clean(self):
         """Remove all installed packages"""
         print("🧹 git-pm clean")
         
         if self.packages_dir.exists():
-            shutil.rmtree(self.packages_dir)
+            self._rmtree_windows_safe(self.packages_dir)
             print("✓ Removed {}".format(self.packages_dir))
         
         if self.lockfile.exists():
