@@ -28,7 +28,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 
 class SimpleYAML:
