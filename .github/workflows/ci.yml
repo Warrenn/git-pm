@@ -8,6 +8,31 @@ on:
   workflow_dispatch:
 
 jobs:
+  test-features:
+    name: Test New Features
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Run feature tests
+        run: |
+          echo "Testing new features..."
+          python3 test_features.py
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ All feature tests passed"
+          else
+            echo "❌ Some feature tests failed"
+            exit 1
+          fi
+
   test-dependency-resolution:
     name: Test Dependency Resolution
     runs-on: ubuntu-22.04

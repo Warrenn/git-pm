@@ -6,16 +6,27 @@ A lightweight, dependency-resolving package manager that uses git sparse-checkou
 
 ## Features
 
+### Core Features
+
 ✅ **Full Dependency Resolution** - Automatically discovers and installs all dependencies  
 ✅ **Explicit Versioning** - No version ranges, uses exact tags/branches/commits  
 ✅ **Branch Resolution** - Branches resolve to latest commit automatically  
 ✅ **Independent Versioning** - Each package can be at different commits  
-✅ **Local Development** - Symlink local packages for live development  
-✅ **Zero Runtime Dependencies** - Pure Python 3.7+ with built-in YAML parser  
+✅ **Local Development** - Symlink local packages for live development with automatic override detection  
+✅ **Zero Runtime Dependencies** - Pure Python 3.8+ with built-in YAML parser  
 ✅ **Cross-Platform** - Works on Linux, macOS, and Windows  
 ✅ **Azure DevOps Support** - Built-in PAT token injection for CI/CD  
 ✅ **Git Sparse-Checkout** - Efficient cloning of monorepo subdirectories  
 ✅ **Smart Caching** - Fast repeated installs with intelligent cache management  
+
+### New in v0.2.0
+
+✅ **Nested Dependency Symlinks** - Automatically creates symlinks inside packages for their dependencies  
+✅ **Environment Variables** - Auto-generates `.git-pm.env` with package paths for scripts  
+✅ **Windows Symlink Support** - Intelligent fallback to junction points on Windows (no admin required)  
+✅ **Automatic .gitignore** - Manages .gitignore entries to prevent accidental commits  
+✅ **Path Resolution** - Solves dependency path conflicts between development and consumption  
+✅ **Local Override Discovery** - Checks local overrides before cloning from remote  
 
 ## Quick Start
 
@@ -64,7 +75,7 @@ git-pm clean
 
 ### Requirements
 
-- **Python 3.7+** - Required
+- **Python 3.8+** - Required (Python 3.7 may work but is not tested)
 - **git** - Required
 - **curl or wget** - For installation (Linux/macOS)
 
@@ -625,6 +636,179 @@ git-pm install
 - Dependency resolution
 - Faster (sparse checkout)
 
+## New Features Guide
+
+### Nested Dependency Symlinks
+
+When PackageB depends on PackageA, git-pm automatically creates symlinks inside PackageB:
+
+```
+.git-packages/
+├── packageA/
+└── packageB/
+    ├── main.tf
+    └── .git-packages/           ← Auto-created!
+        └── packageA -> ../../packageA
+```
+
+**Your code (works in both development and consumption):**
+```hcl
+# packageB/main.tf
+module "package_a" {
+  source = ".git-packages/packageA"  # Works everywhere!
+}
+```
+
+**Installation output:**
+```bash
+$ git-pm install
+...
+🔗 Creating dependency symlinks...
+  ✓ packageB/packageA -> packageA
+```
+
+**Benefits:**
+- ✅ Same path works in development and consumption
+- ✅ No manual symlink management
+- ✅ Works with Terraform and other tools
+- ✅ Automatic on every install
+
+### Environment Variables
+
+git-pm generates `.git-pm.env` with absolute paths for use in scripts:
+
+**Generated `.git-pm.env`:**
+```bash
+export GIT_PM_PACKAGES_DIR="/absolute/path/to/.git-packages"
+export GIT_PM_PROJECT_ROOT="/absolute/path/to/project"
+export GIT_PM_PACKAGE_PACKAGEA="/absolute/path/to/.git-packages/packageA"
+export GIT_PM_PACKAGE_PACKAGEB="/absolute/path/to/.git-packages/packageB"
+```
+
+**Usage in scripts:**
+```bash
+#!/bin/bash
+source .git-pm.env
+
+# Use absolute paths
+terraform -chdir="$GIT_PM_PACKAGE_PACKAGEB" init
+terraform -chdir="$GIT_PM_PACKAGE_PACKAGEB" apply
+```
+
+**Python example:**
+```python
+import os
+packages_dir = os.environ['GIT_PM_PACKAGES_DIR']
+```
+
+**Makefile example:**
+```makefile
+include .git-pm.env
+
+deploy:
+	cd $(GIT_PM_PACKAGE_PACKAGEB) && terraform apply
+```
+
+### Windows Symlink Support
+
+git-pm automatically handles Windows symlinks with intelligent fallback:
+
+**Scenario 1: Developer Mode Enabled**
+```bash
+🔗 Creating dependency symlinks...
+  ✓ packageB/packageA -> packageA  (symbolic link)
+```
+
+**Scenario 2: No Developer Mode (Auto-Fallback)**
+```bash
+🔗 Creating dependency symlinks...
+  ⚠️  Windows: Symlinks require Developer Mode
+     Falling back to junction points...
+  ✓ packageB/packageA -> packageA  (junction)
+```
+
+**Enable Developer Mode (optional but recommended):**
+1. Settings → Update & Security → For developers
+2. Toggle "Developer Mode" ON
+3. Restart terminal
+4. Run `git-pm install`
+
+**Both methods work identically with Terraform!**
+
+### Automatic .gitignore Management
+
+git-pm automatically manages `.gitignore` entries on every install:
+
+**Auto-added entries:**
+```gitignore
+# git-pm - Package manager files
+.git-packages/
+.git-pm.env
+git-pm.local.yaml
+git-pm.lock
+```
+
+**Installation output:**
+```bash
+$ git-pm install
+📝 Updating .gitignore...
+  ✓ Added: .git-packages/
+  ✓ Added: .git-pm.env
+  ✓ Added: git-pm.local.yaml
+  ✓ Added: git-pm.lock
+```
+
+**Skip automatic management:**
+```bash
+git-pm install --no-gitignore
+```
+
+**Why these files should be ignored:**
+- `.git-packages/` - Installed dependencies (like node_modules)
+- `.git-pm.env` - Absolute paths (unique per developer)
+- `git-pm.local.yaml` - Local overrides (machine-specific)
+- `git-pm.lock` - Optional (commit for apps, ignore for libraries)
+
+### Local Development with Overrides
+
+Create `git-pm.local.yaml` to override packages with local paths during development:
+
+**git-pm.yaml:**
+```yaml
+packages:
+  my-package:
+    repo: github.com/company/repo
+    path: packages/my-package
+    ref:
+      type: tag
+      value: v1.0.0
+```
+
+**git-pm.local.yaml:**
+```yaml
+overrides:
+  my-package:
+    type: local
+    path: ../local-dev/my-package
+```
+
+**Installation:**
+```bash
+$ git-pm install
+🔍 Discovering dependencies...
+📦 Discovering my-package...
+  Using local override: ../local-dev/my-package  ← No remote clone!
+📦 Installing my-package...
+  Override: my-package -> local (symlinked)
+```
+
+**Benefits:**
+- ✅ No remote clones during development
+- ✅ Live updates (symlinks)
+- ✅ Fast iteration
+- ✅ Works offline
+- ✅ Automatic detection (checks before cloning)
+
 ## Contributing
 
 Issues and PRs welcome at https://github.com/Warrenn/git-pm
@@ -635,4 +819,4 @@ MIT License - See LICENSE file
 
 ## Credits
 
-Created by Warrenn Enslin (https://github.com/Warrenn)
+Created by Warren Nel (https://github.com/Warrenn)
