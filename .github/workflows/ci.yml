@@ -33,6 +33,31 @@ jobs:
             exit 1
           fi
 
+  test-simpleyaml-dump:
+    name: Test SimpleYAML Dump (Phase 1)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Run SimpleYAML dump tests
+        run: |
+          echo "Testing SimpleYAML dump methods..."
+          python3 test_simpleyaml_dump.py
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ All SimpleYAML dump tests passed"
+          else
+            echo "❌ Some SimpleYAML dump tests failed"
+            exit 1
+          fi
+
   test-dependency-resolution:
     name: Test Dependency Resolution
     runs-on: ubuntu-22.04

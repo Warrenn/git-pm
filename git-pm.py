@@ -3,7 +3,7 @@
 git-pm: Git Package Manager
 A package manager that uses git sparse-checkout to manage dependencies with full dependency resolution.
 
-Version 0.2.6 - Full dependency resolution with explicit versions
+Version 0.2.9 - Full dependency resolution with explicit versions
 Requires Python 3.8+ (3.7 may work but is not tested)
 """
 
@@ -19,6 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Fix Windows encoding issues with Unicode characters (emojis)
 if sys.platform == 'win32':
     # Set UTF-8 encoding for stdout and stderr
     import io
@@ -27,7 +28,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.2.8"
+__version__ = "0.2.9"
 
 
 class SimpleYAML:
@@ -103,14 +104,44 @@ class SimpleYAML:
         SimpleYAML._dump_dict(data, file_obj, 0)
     
     @staticmethod
+    def dumps(data):
+        """Dump data to YAML string"""
+        from io import StringIO
+        output = StringIO()
+        SimpleYAML._dump_dict(data, output, 0)
+        return output.getvalue()
+    
+    @staticmethod
     def _dump_dict(data, file_obj, indent):
         """Recursively dump dictionary"""
-        for key, value in data.items():
+        for key, value in sorted(data.items()):
             if isinstance(value, dict):
-                file_obj.write("{}{}:\n".format("  " * indent, key))
-                SimpleYAML._dump_dict(value, file_obj, indent + 1)
-            else:
+                if value:  # Non-empty dict
+                    file_obj.write("{}{}:\n".format("  " * indent, key))
+                    SimpleYAML._dump_dict(value, file_obj, indent + 1)
+                else:  # Empty dict
+                    file_obj.write("{}{}: {{}}\n".format("  " * indent, key))
+            elif isinstance(value, bool):
+                # Boolean must be checked before int (bool is subclass of int)
+                file_obj.write("{}{}: {}\n".format("  " * indent, key, str(value).lower()))
+            elif isinstance(value, (int, float)):
                 file_obj.write("{}{}: {}\n".format("  " * indent, key, value))
+            elif isinstance(value, list):
+                if value:  # Non-empty list
+                    file_obj.write("{}{}:\n".format("  " * indent, key))
+                    for item in value:
+                        file_obj.write("{}  - {}\n".format("  " * indent, item))
+                else:  # Empty list
+                    file_obj.write("{}{}: []\n".format("  " * indent, key))
+            elif value is None:
+                file_obj.write("{}{}: null\n".format("  " * indent, key))
+            else:
+                # String - quote if contains special chars
+                value_str = str(value)
+                if any(c in value_str for c in [':', '#', '[', ']', '{', '}', ',', '&', '*', '!', '|', '>', "'", '"', '%', '@', '`']):
+                    # Quote the value
+                    value_str = '"{}"'.format(value_str.replace('"', '\\"'))
+                file_obj.write("{}{}: {}\n".format("  " * indent, key, value_str))
 
 
 class GitPM:
