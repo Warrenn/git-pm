@@ -357,7 +357,7 @@ jobs:
           echo "Testing invocation methods..."
           
           # Method 1: Via wrapper
-          if git-pm --version 2>&1 | grep -q "git-pm 0.2.0"; then
+          if git-pm --version 2>&1 | grep -qE "git-pm [0-9]+\.[0-9]+(\.[0-9]+)?"; then
             echo "✅ Wrapper command works: git-pm"
           else
             echo "❌ Wrapper command failed"
@@ -366,7 +366,7 @@ jobs:
           fi
           
           # Method 2: Direct script (with PATH)
-          if git-pm.py --version 2>&1 | grep -q "git-pm 0.2.0"; then
+          if git-pm.py --version 2>&1 | grep -qE "git-pm [0-9]+\.[0-9]+(\.[0-9]+)?"; then
             echo "✅ Direct command works: git-pm.py"
           else
             echo "❌ Direct command failed"
@@ -375,7 +375,7 @@ jobs:
           fi
           
           # Method 3: Explicit Python
-          if python3 "$INSTALL_DIR/git-pm.py" --version 2>&1 | grep -q "git-pm 0.2.0"; then
+          if python3 "$INSTALL_DIR/git-pm.py" --version 2>&1 | grep -qE "git-pm [0-9]+\.[0-9]+(\.[0-9]+)?"; then
             echo "✅ Python invocation works: python3 git-pm.py"
           else
             echo "❌ Python invocation failed"
@@ -472,7 +472,7 @@ jobs:
           
           # Method 1: Batch wrapper
           $version = & git-pm --version 2>&1
-          if ($version -match "git-pm 0.2.0") {
+          if ($version -match "git-pm \d+\.\d+(\.\d+)?") {
             Write-Host "✅ Batch wrapper works: git-pm"
           } else {
             Write-Host "❌ Batch wrapper failed"
@@ -481,7 +481,7 @@ jobs:
           
           # Method 2: Python direct
           $version = python "$InstallDir\git-pm.py" --version 2>&1
-          if ($version -match "git-pm 0.2.0") {
+          if ($version -match "git-pm \d+\.\d+(\.\d+)?") {
             Write-Host "✅ Python invocation works"
           } else {
             Write-Host "❌ Python invocation failed"
