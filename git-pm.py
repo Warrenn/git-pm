@@ -28,7 +28,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 
 class SimpleYAML:
@@ -441,10 +441,13 @@ class GitPM:
             print("    ✗ Operation failed: {}".format(e))
             return False
     
-    def discover_dependencies(self, packages, depth=0, parent_chain=None):
+    def discover_dependencies(self, packages, depth=0, parent_chain=None, overrides=None):
         """Recursively discover all dependencies"""
         if parent_chain is None:
             parent_chain = []
+        
+        if overrides is None:
+            overrides = {}
         
         # Type check
         if not isinstance(packages, dict):
@@ -468,6 +471,57 @@ class GitPM:
                 " (depth {})".format(depth) if depth > 0 else ""
             ))
             
+            # Check for local override first
+            if name in overrides:
+                override = overrides[name]
+                if override.get("type") == "local":
+                    local_path = Path(override["path"])
+                    if not local_path.is_absolute():
+                        local_path = (self.project_root / local_path).resolve()
+                    
+                    if not local_path.exists():
+                        print("{}  ✗ Local override path does not exist: {}".format("  " * depth, local_path))
+                        continue
+                    
+                    print("{}  Using local override: {}".format("  " * depth, local_path))
+                    
+                    # Look for git-pm.yaml in local path
+                    pkg_manifest_path = local_path / "git-pm.yaml"
+                    
+                    nested_deps = {}
+                    if pkg_manifest_path.exists():
+                        with open(pkg_manifest_path, 'r') as f:
+                            pkg_data = SimpleYAML.load(f)
+                            nested_deps = pkg_data.get("packages", {})
+                        
+                        # Defensive: ensure nested_deps is a dict
+                        if not isinstance(nested_deps, dict):
+                            print("{}  ⚠️  Warning: packages field is not a dictionary, treating as empty".format("  " * depth))
+                            nested_deps = {}
+                        
+                        if nested_deps:
+                            print("{}  Found {} dependencies".format("  " * depth, len(nested_deps)))
+                            # Recursively discover
+                            discovered_nested = self.discover_dependencies(
+                                nested_deps,
+                                depth + 1,
+                                parent_chain + [name],
+                                overrides  # Pass overrides down
+                            )
+                            all_discovered.update(discovered_nested)
+                    
+                    # Store discovered package with local override info
+                    self.discovered[name] = {
+                        "config": config,
+                        "dependencies": nested_deps,
+                        "depth": depth,
+                        "local_override": True,
+                        "local_path": str(local_path)
+                    }
+                    all_discovered[name] = self.discovered[name]
+                    continue
+            
+            # No local override, proceed with remote clone
             # Resolve branch to commit if needed
             ref = config.get("ref", {})
             ref_type = ref.get("type", "branch")
@@ -525,7 +579,8 @@ class GitPM:
                     discovered_nested = self.discover_dependencies(
                         nested_deps,
                         depth + 1,
-                        parent_chain + [name]
+                        parent_chain + [name],
+                        overrides  # Pass overrides down
                     )
                     all_discovered.update(discovered_nested)
             
@@ -576,7 +631,7 @@ class GitPM:
         print("📦 Installing {}...".format(name))
         
         config = pkg_info["config"]
-        cache_path = pkg_info["cache_path"]
+        cache_path = pkg_info.get("cache_path")  # Make optional for local overrides
         path = config.get("path", "")
         
         # Check for local override
@@ -605,7 +660,11 @@ class GitPM:
                     }
                 return None
         
-        # Install from cache
+        # Install from cache (only if not local override)
+        if not cache_path:
+            print("  ✗ No cache path available for package")
+            return None
+        
         dest_path = self.packages_dir / name
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -651,7 +710,7 @@ class GitPM:
         if resolve_deps:
             # Full dependency resolution
             print("🔍 Discovering dependencies...")
-            self.discover_dependencies(root_packages)
+            self.discover_dependencies(root_packages, overrides=overrides)
             print("   Found {} total packages".format(len(self.discovered)))
             
             print("📦 Planning installation order...")
