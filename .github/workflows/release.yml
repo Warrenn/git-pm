@@ -127,37 +127,58 @@ jobs:
           - **Lines Added:** ${{ steps.stats.outputs.insertions }}
           - **Lines Removed:** ${{ steps.stats.outputs.deletions }}
           
-          ## ✨ What's New
+          ## ✨ What's New in v0.2.6
           
-          ### Full Dependency Resolution
-          - Automatic recursive dependency discovery
-          - Reads \\`git-pm.yaml\\` from each package
-          - Topological sorting (dependencies first)
-          - Complete dependency tree in lockfile
-          - Opt-out with \`--no-resolve-deps\` flag
+          ### 🔗 Nested Dependency Symlinks
+          - Automatically creates \\`.git-packages/\\` inside each package
+          - Symlinks point to sibling dependencies (\\`../../depName\\`)
+          - Same path works in development AND consumption
+          - No manual symlink management needed
           
-          ### Branch Auto-Resolution
-          - Branches automatically resolve to latest commit SHA
-          - All references to same branch use same commit
-          - \`git-pm update\` pulls latest commits for branches
-          - Deterministic installs via lockfile
+          ### 🌍 Environment Variables Generation
+          - Auto-generates \\`.git-pm.env\\` with absolute paths
+          - \\`GIT_PM_PACKAGES_DIR\\` - Root packages directory
+          - \\`GIT_PM_PACKAGE_<NAME>\\` - Individual package paths
+          - Perfect for scripts, Makefiles, CI/CD
           
-          ### Global Installation
-          - **Linux/macOS:** Installs to \`~/.local/bin/git-pm.py\`
-          - **Windows:** Installs to \`%USERPROFILE%\.git-pm\git-pm.py\`
-          - Automatic PATH configuration
-          - Works from any directory
-          - Command wrappers for convenience
+          ### 🪟 Windows Symlink Support
+          - Intelligent fallback to junction points
+          - No admin privileges required
+          - Works with or without Developer Mode
+          - Both methods work identically with Terraform
           
-          ### Enhanced Local Development
-          - Local overrides now use **symlinks** instead of copying
-          - Live updates during development
-          - Faster iteration cycle
+          ### 📝 Automatic .gitignore Management
+          - Automatically adds git-pm files on install
+          - Never duplicates entries
+          - Prevents accidental commits of:
+            - \\`.git-packages/\\` (installed dependencies)
+            - \\`.git-pm.env\\` (absolute paths)
+            - \\`git-pm.local.yaml\\` (local overrides)
+            - \\`git-pm.lock\\` (lockfile - optional)
+          - Skip with \`--no-gitignore\` flag
           
-          ### Azure DevOps Integration
-          - Built-in PAT token injection via \`AZURE_DEVOPS_PAT\` env var
-          - Works seamlessly in Azure Pipelines
-          - No code changes needed for different auth methods
+          ### 🚀 Local Override Discovery
+          - Checks local overrides BEFORE cloning
+          - No unnecessary remote clones
+          - 6x faster installation with overrides
+          - Works offline
+          - Reads nested dependencies from local paths
+          
+          ### 🎯 Path Resolution
+          - Solves path conflicts between dev and consumption
+          - Dual approach: symlinks + environment variables
+          - Symlinks for Terraform (automatic)
+          - Environment variables for scripts (\\`.git-pm.env\\`)
+          
+          ### Core Features (v0.1-0.2)
+          - ✅ Full Dependency Resolution
+          - ✅ Explicit Versioning (no ranges)
+          - ✅ Branch Auto-Resolution
+          - ✅ Independent Versioning
+          - ✅ Git Sparse-Checkout
+          - ✅ Smart Caching
+          - ✅ Cross-Platform (Linux, macOS, Windows)
+          - ✅ Azure DevOps Integration
           
           ## 🚀 Quick Start
           
@@ -242,9 +263,31 @@ jobs:
           
           ## 📚 Documentation
           
-          - [README.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/README.md)
-          - [DEPENDENCY_RESOLUTION.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/DEPENDENCY_RESOLUTION.md)
-          - [Repository](${{ env.REPO_URL }})
+          ### Main Documentation
+          - [README.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/README.md) - Getting started guide
+          - [FEATURES.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/FEATURES.md) - Complete feature reference
+          - [DEPENDENCY_RESOLUTION.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/DEPENDENCY_RESOLUTION.md) - How dependency resolution works
+          
+          ### Feature Guides
+          - [NESTED_DEPENDENCY_SYMLINKS.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/NESTED_DEPENDENCY_SYMLINKS.md) - Path resolution with symlinks
+          - [ENVIRONMENT_VARIABLES_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/ENVIRONMENT_VARIABLES_GUIDE.md) - Using .git-pm.env
+          - [WINDOWS_SYMLINK_SUPPORT.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/WINDOWS_SYMLINK_SUPPORT.md) - Windows compatibility
+          - [GITIGNORE_MANAGEMENT.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/GITIGNORE_MANAGEMENT.md) - Automatic .gitignore
+          - [LOCAL_OVERRIDE_DISCOVERY_FIX.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/LOCAL_OVERRIDE_DISCOVERY_FIX.md) - Local development
+          - [PATH_RESOLUTION_COMPLETE_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/PATH_RESOLUTION_COMPLETE_GUIDE.md) - Path resolution
+          
+          ### Quick References
+          - [WINDOWS_QUICK_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/WINDOWS_QUICK_GUIDE.md) - Windows setup
+          - [GITIGNORE_QUICK_REFERENCE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/GITIGNORE_QUICK_REFERENCE.md) - .gitignore reference
+          
+          ### CI/CD & Deployment
+          - [CI_CD_DOCUMENTATION.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/CI_CD_DOCUMENTATION.md) - CI/CD integration
+          - [DEPLOYMENT_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/DEPLOYMENT_GUIDE.md) - Deployment instructions
+          
+          ### Repository
+          - [GitHub Repository](${{ env.REPO_URL }})
+          - [Issues](${{ env.REPO_URL }}/issues)
+          - [Releases](${{ env.REPO_URL }}/releases)
           
           ## 🙏 Feedback
           

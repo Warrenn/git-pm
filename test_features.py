@@ -12,6 +12,15 @@ from pathlib import Path
 import json
 import subprocess
 
+# Get the repository root (where git-pm.py is located)
+REPO_ROOT = Path(__file__).parent.resolve()
+GIT_PM_SCRIPT = REPO_ROOT / "git-pm.py"
+
+if not GIT_PM_SCRIPT.exists():
+    print(f"❌ Error: git-pm.py not found at {GIT_PM_SCRIPT}")
+    print("   Please run from the repository root")
+    sys.exit(1)
+
 def run_command(cmd, cwd=None):
     """Run a command and return output"""
     result = subprocess.run(
@@ -22,6 +31,10 @@ def run_command(cmd, cwd=None):
         text=True
     )
     return result.returncode, result.stdout, result.stderr
+
+def setup_test_environment(test_dir):
+    """Copy git-pm.py to test directory"""
+    shutil.copy(GIT_PM_SCRIPT, test_dir / "git-pm.py")
 
 def test_local_overrides():
     """Test local override discovery and installation"""
@@ -34,10 +47,28 @@ def test_local_overrides():
         # Create local package
         local_pkg_dir.mkdir(parents=True)
         (local_pkg_dir / "main.tf").write_text("# Local package")
+        (local_pkg_dir / "git-pm.yaml").write_text("packages: {}")
         
         # Create project
         project_dir.mkdir(parents=True)
+        
+        # Copy git-pm.py to project directory
+        setup_test_environment(project_dir)
+        
+        # Verify git-pm.py was copied
+        gitpm_path = project_dir / "git-pm.py"
+        if not gitpm_path.exists():
+            print(f"  ❌ Failed to copy git-pm.py to {project_dir}")
+            return False
+        
         os.chdir(project_dir)
+        
+        # Verify we can see git-pm.py from current directory
+        if not Path("git-pm.py").exists():
+            print(f"  ❌ git-pm.py not found in current directory after chdir")
+            print(f"     Current directory: {os.getcwd()}")
+            print(f"     Files: {list(Path('.').iterdir())}")
+            return False
         
         # Initialize git
         run_command("git init")
@@ -53,7 +84,7 @@ def test_local_overrides():
       type: tag
       value: v1.0.0
 """
-        (project_dir / "git-pm.yaml").write_text(manifest)
+        Path("git-pm.yaml").write_text(manifest)
         
         # Create local override
         local_override = f"""overrides:
@@ -61,7 +92,7 @@ def test_local_overrides():
     type: local
     path: {local_pkg_dir}
 """
-        (project_dir / "git-pm.local.yaml").write_text(local_override)
+        Path("git-pm.local.yaml").write_text(local_override)
         
         # Run install
         code, stdout, stderr = run_command("python3 git-pm.py install --no-resolve-deps")
@@ -70,11 +101,15 @@ def test_local_overrides():
         if "Using local override" in stdout or "Override:" in stdout:
             print("  ✅ Local override detected and used")
         else:
-            print(f"  ❌ Local override not used\nOutput: {stdout}\nError: {stderr}")
+            print(f"  ❌ Local override not used")
+            if stderr:
+                print(f"     Error: {stderr}")
+            if stdout:
+                print(f"     Output: {stdout}")
             return False
         
-        # Check if symlink was created
-        pkg_path = project_dir / ".git-packages" / "test-package"
+        # Check if package was installed
+        pkg_path = Path(".git-packages") / "test-package"
         if pkg_path.exists():
             print("  ✅ Package installed via local override")
         else:
@@ -90,7 +125,16 @@ def test_environment_variables():
     with tempfile.TemporaryDirectory() as tmpdir:
         project_dir = Path(tmpdir) / "project"
         project_dir.mkdir(parents=True)
+        
+        # Copy git-pm.py to project directory
+        setup_test_environment(project_dir)
+        
         os.chdir(project_dir)
+        
+        # Verify git-pm.py exists
+        if not Path("git-pm.py").exists():
+            print(f"  ❌ git-pm.py not found after setup")
+            return False
         
         # Initialize git
         run_command("git init")
@@ -106,20 +150,21 @@ def test_environment_variables():
       type: commit
       value: abc123
 """
-        (project_dir / "git-pm.yaml").write_text(manifest)
+        Path("git-pm.yaml").write_text(manifest)
         
         # Create fake package in cache
-        cache_dir = project_dir / ".git-pm-cache"
+        cache_dir = Path(".git-pm-cache")
         pkg_cache = cache_dir / "test-cache"
         pkg_cache.mkdir(parents=True)
         (pkg_cache / "package").mkdir()
         (pkg_cache / "package" / "main.tf").write_text("# Test")
+        (pkg_cache / "package" / "git-pm.yaml").write_text("packages: {}")
         
         # Run install (will fail but should still generate env file)
         run_command("python3 git-pm.py install --no-resolve-deps")
         
         # Check if .git-pm.env was created
-        env_file = project_dir / ".git-pm.env"
+        env_file = Path(".git-pm.env")
         if env_file.exists():
             content = env_file.read_text()
             
@@ -149,7 +194,16 @@ def test_gitignore_management():
     with tempfile.TemporaryDirectory() as tmpdir:
         project_dir = Path(tmpdir) / "project"
         project_dir.mkdir(parents=True)
+        
+        # Copy git-pm.py to project directory
+        setup_test_environment(project_dir)
+        
         os.chdir(project_dir)
+        
+        # Verify git-pm.py exists
+        if not Path("git-pm.py").exists():
+            print(f"  ❌ git-pm.py not found after setup")
+            return False
         
         # Initialize git
         run_command("git init")
@@ -165,13 +219,13 @@ def test_gitignore_management():
       type: commit
       value: abc123
 """
-        (project_dir / "git-pm.yaml").write_text(manifest)
+        Path("git-pm.yaml").write_text(manifest)
         
         # Run install (will fail but should update .gitignore)
         run_command("python3 git-pm.py install --no-resolve-deps")
         
         # Check if .gitignore was created/updated
-        gitignore = project_dir / ".gitignore"
+        gitignore = Path(".gitignore")
         if gitignore.exists():
             content = gitignore.read_text()
             
@@ -207,6 +261,10 @@ def test_gitignore_no_duplicates():
     with tempfile.TemporaryDirectory() as tmpdir:
         project_dir = Path(tmpdir) / "project"
         project_dir.mkdir(parents=True)
+        
+        # Copy git-pm.py to project directory
+        setup_test_environment(project_dir)
+        
         os.chdir(project_dir)
         
         # Initialize git
@@ -215,7 +273,7 @@ def test_gitignore_no_duplicates():
         run_command("git config user.name 'Test User'")
         
         # Create existing .gitignore
-        gitignore = project_dir / ".gitignore"
+        gitignore = Path(".gitignore")
         gitignore.write_text(".git-packages/\n")
         
         # Create manifest
@@ -227,7 +285,7 @@ def test_gitignore_no_duplicates():
       type: commit
       value: abc123
 """
-        (project_dir / "git-pm.yaml").write_text(manifest)
+        Path("git-pm.yaml").write_text(manifest)
         
         # Run install twice
         run_command("python3 git-pm.py install --no-resolve-deps")
@@ -255,6 +313,10 @@ def test_gitignore_skip_flag():
     with tempfile.TemporaryDirectory() as tmpdir:
         project_dir = Path(tmpdir) / "project"
         project_dir.mkdir(parents=True)
+        
+        # Copy git-pm.py to project directory
+        setup_test_environment(project_dir)
+        
         os.chdir(project_dir)
         
         # Initialize git
@@ -271,13 +333,13 @@ def test_gitignore_skip_flag():
       type: commit
       value: abc123
 """
-        (project_dir / "git-pm.yaml").write_text(manifest)
+        Path("git-pm.yaml").write_text(manifest)
         
         # Run install with --no-gitignore
         run_command("python3 git-pm.py install --no-gitignore --no-resolve-deps")
         
         # Check if .gitignore was NOT created
-        gitignore = project_dir / ".gitignore"
+        gitignore = Path(".gitignore")
         if not gitignore.exists():
             print("  ✅ .gitignore not created with --no-gitignore flag")
         else:
@@ -353,12 +415,6 @@ def main():
     print("=" * 60)
     print("git-pm Feature Test Suite")
     print("=" * 60)
-    
-    # Check if git-pm.py exists
-    if not Path("git-pm.py").exists():
-        print("❌ Error: git-pm.py not found in current directory")
-        print("   Please run from the directory containing git-pm.py")
-        return 1
     
     tests = [
         ("Local Override Discovery", test_local_overrides),
