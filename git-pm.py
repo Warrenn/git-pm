@@ -28,7 +28,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.2.9"
+__version__ = "0.3.0"
 
 
 class GitPM:
@@ -1053,6 +1053,191 @@ class GitPM:
         print("✅ Clean complete!")
         return 0
     
+    def cmd_remove(self, package_name, auto_confirm=False):
+        """Remove a package from manifests and optionally from disk"""
+        print("🗑️  git-pm remove")
+        print(f"Package: {package_name}")
+        print()
+        
+        # Load manifests
+        manifest_packages = {}
+        local_packages = {}
+        
+        if self.manifest_file.exists():
+            manifest = self._load_json_file(self.manifest_file, "manifest")
+            manifest_packages = manifest.get("packages", {})
+        
+        if self.local_override_file.exists():
+            local_override = self._load_json_file(self.local_override_file, "local override")
+            local_packages = local_override.get("packages", {})
+        
+        # Check if package exists in either manifest
+        in_manifest = package_name in manifest_packages
+        in_local = package_name in local_packages
+        
+        if not in_manifest and not in_local:
+            print(f"⚠️  Package '{package_name}' not found in git-pm.json or git-pm.local")
+            return 1
+        
+        print("📋 Analyzing dependencies...")
+        
+        # Build complete dependency graph of what will remain
+        # After removing package_name from manifests
+        remaining_in_manifest = {k: v for k, v in manifest_packages.items() if k != package_name}
+        remaining_in_local = {k: v for k, v in local_packages.items() if k != package_name}
+        
+        # Find all packages that will still be needed after removal
+        needed_packages = set()
+        
+        def collect_dependencies(pkg_name, config, visited=None):
+            """Recursively collect all dependencies of a package"""
+            if visited is None:
+                visited = set()
+            
+            if pkg_name in visited:
+                return
+            visited.add(pkg_name)
+            needed_packages.add(pkg_name)
+            
+            # Get package location to read its manifest
+            pkg_dir = self.packages_dir / pkg_name
+            pkg_manifest = pkg_dir / "git-pm.json"
+            
+            if pkg_manifest.exists():
+                pkg_data = self._load_json_file(pkg_manifest, f"{pkg_name} manifest")
+                pkg_deps = pkg_data.get("packages", {})
+                
+                for dep_name in pkg_deps:
+                    collect_dependencies(dep_name, pkg_deps[dep_name], visited)
+        
+        # Collect dependencies for all remaining packages
+        for pkg_name, config in remaining_in_manifest.items():
+            collect_dependencies(pkg_name, config)
+        
+        for pkg_name, config in remaining_in_local.items():
+            collect_dependencies(pkg_name, config)
+        
+        # Determine what can be removed from disk
+        packages_to_remove_from_disk = []
+        
+        if self.packages_dir.exists():
+            for item in self.packages_dir.iterdir():
+                if item.is_dir() and item.name not in needed_packages:
+                    packages_to_remove_from_disk.append(item.name)
+        
+        # Show preview
+        print()
+        print("📦 Removal plan:")
+        print()
+        
+        if in_manifest:
+            print(f"  ✓ Remove from git-pm.json: {package_name}")
+        
+        if in_local:
+            print(f"  ✓ Remove from git-pm.local: {package_name}")
+        
+        if packages_to_remove_from_disk:
+            print()
+            print(f"  ✓ Remove from .git-packages/ ({len(packages_to_remove_from_disk)} package(s)):")
+            for pkg in sorted(packages_to_remove_from_disk):
+                reason = "no longer needed" if pkg != package_name else "explicitly removed"
+                print(f"    - {pkg} ({reason})")
+        else:
+            if package_name not in needed_packages:
+                print()
+                print(f"  ℹ️  '{package_name}' not in .git-packages/ (already removed or never installed)")
+            else:
+                print()
+                print(f"  ℹ️  '{package_name}' still needed by other packages, keeping in .git-packages/")
+        
+        # Calculate packages that will remain
+        remaining_on_disk = []
+        if self.packages_dir.exists():
+            for item in self.packages_dir.iterdir():
+                if item.is_dir() and item.name not in packages_to_remove_from_disk:
+                    remaining_on_disk.append(item.name)
+        
+        if remaining_on_disk:
+            print()
+            print(f"  ✓ Keep in .git-packages/ ({len(remaining_on_disk)} package(s)):")
+            for pkg in sorted(remaining_on_disk):
+                if pkg in needed_packages:
+                    print(f"    - {pkg} (still needed)")
+        
+        # Confirm
+        if not auto_confirm:
+            print()
+            response = input("Proceed with removal? (y/N): ").strip().lower()
+            if response != 'y':
+                print("Cancelled.")
+                return 0
+        
+        print()
+        print("🔧 Removing package...")
+        
+        # Remove from git-pm.json
+        if in_manifest:
+            del manifest_packages[package_name]
+            manifest["packages"] = manifest_packages
+            
+            with open(self.manifest_file, 'w') as f:
+                json.dump(manifest, f, indent=4)
+            
+            print(f"  ✓ Removed from {self.manifest_file.name}")
+        
+        # Remove from git-pm.local
+        if in_local:
+            del local_packages[package_name]
+            local_override["packages"] = local_packages
+            
+            with open(self.local_override_file, 'w') as f:
+                json.dump(local_override, f, indent=4)
+            
+            print(f"  ✓ Removed from {self.local_override_file.name}")
+        
+        # Remove from .git-packages/
+        if packages_to_remove_from_disk:
+            for pkg_name in packages_to_remove_from_disk:
+                pkg_dir = self.packages_dir / pkg_name
+                if pkg_dir.exists():
+                    self._rmtree_windows_safe(pkg_dir)
+                    print(f"  ✓ Removed {pkg_name}/ from .git-packages/")
+        
+        # Update .git-pm.env
+        env_file = self.project_root / ".git-pm.env"
+        if env_file.exists():
+            with open(env_file, 'r') as f:
+                env_lines = f.readlines()
+            
+            # Remove entries for deleted packages
+            new_env_lines = []
+            for line in env_lines:
+                # Keep line if it doesn't reference any removed package
+                should_keep = True
+                for pkg_name in packages_to_remove_from_disk:
+                    # Check for entries like GIT_PM_PACKAGE_pkg_name=...
+                    safe_name = pkg_name.replace('-', '_').replace('.', '_')
+                    if f"GIT_PM_PACKAGE_{safe_name}=" in line:
+                        should_keep = False
+                        break
+                
+                if should_keep:
+                    new_env_lines.append(line)
+            
+            # Write back
+            with open(env_file, 'w') as f:
+                f.writelines(new_env_lines)
+            
+            print(f"  ✓ Updated .git-pm.env")
+        
+        print()
+        print(f"✅ Successfully removed '{package_name}'")
+        
+        if packages_to_remove_from_disk:
+            print(f"   Removed {len(packages_to_remove_from_disk)} package(s) from disk")
+        
+        return 0
+    
     def cmd_add(self, name, repo, path, ref_type, ref_value):
         """Add a package to manifest"""
         print("📦 git-pm add")
@@ -1119,6 +1304,15 @@ def main():
 
     subparsers.add_parser("clean", help="Remove all installed packages")
     
+    # Remove command
+    remove_parser = subparsers.add_parser("remove", help="Remove a package from the project")
+    remove_parser.add_argument("package", help="Package name to remove")
+    remove_parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Skip confirmation prompt"
+    )
+    
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a package to the manifest")
     add_parser.add_argument("name", help="Package name")
@@ -1146,6 +1340,8 @@ def main():
         )
     elif args.command == "clean":
         return gpm.cmd_clean()
+    elif args.command == "remove":
+        return gpm.cmd_remove(args.package, auto_confirm=args.yes)
     elif args.command == "add":
         return gpm.cmd_add(args.name, args.repo, args.path, args.ref_type, args.ref_value)
     

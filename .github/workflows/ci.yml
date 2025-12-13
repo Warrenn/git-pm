@@ -195,6 +195,284 @@ jobs:
             exit 1
           fi
 
+  test-remove-command:
+    name: Remove Command (Deep Nested Dependencies)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Test deep nested removal and preservation
+        run: |
+          echo "Testing remove command with deep nested dependencies..."
+          
+          TEST_DIR="test-remove-nested"
+          mkdir -p "$TEST_DIR"
+          cd "$TEST_DIR"
+          cp ../git-pm.py .
+          
+          echo "Creating package structure with deep nesting..."
+          
+          # Create package directories
+          # Dependency tree:
+          #   project → pkg-a, pkg-x
+          #   pkg-a → pkg-b, pkg-c
+          #   pkg-b → pkg-d
+          #   pkg-c → pkg-d
+          #   pkg-x → pkg-d
+          
+          mkdir -p packages/{pkg-a,pkg-b,pkg-c,pkg-d,pkg-x}
+          
+          # pkg-d (no dependencies - leaf node)
+          cat > packages/pkg-d/git-pm.json << 'PKGD'
+          {
+              "packages": {}
+          }
+          PKGD
+          echo "pkg-d content" > packages/pkg-d/README.md
+          
+          # pkg-c (depends on pkg-d)
+          cat > packages/pkg-c/git-pm.json << 'PKGC'
+          {
+              "packages": {
+                  "pkg-d": {
+                      "repo": "file:///tmp/mock",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  }
+              }
+          }
+          PKGC
+          echo "pkg-c content" > packages/pkg-c/README.md
+          
+          # pkg-b (depends on pkg-d)
+          cat > packages/pkg-b/git-pm.json << 'PKGB'
+          {
+              "packages": {
+                  "pkg-d": {
+                      "repo": "file:///tmp/mock",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  }
+              }
+          }
+          PKGB
+          echo "pkg-b content" > packages/pkg-b/README.md
+          
+          # pkg-a (depends on pkg-b and pkg-c)
+          cat > packages/pkg-a/git-pm.json << 'PKGA'
+          {
+              "packages": {
+                  "pkg-b": {
+                      "repo": "file:///tmp/mock",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  },
+                  "pkg-c": {
+                      "repo": "file:///tmp/mock",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  }
+              }
+          }
+          PKGA
+          echo "pkg-a content" > packages/pkg-a/README.md
+          
+          # pkg-x (depends on pkg-d)
+          cat > packages/pkg-x/git-pm.json << 'PKGX'
+          {
+              "packages": {
+                  "pkg-d": {
+                      "repo": "file:///tmp/mock",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  }
+              }
+          }
+          PKGX
+          echo "pkg-x content" > packages/pkg-x/README.md
+          
+          # Initialize project
+          git init
+          git config user.email "test@test.com"
+          git config user.name "Test User"
+          
+          # Create project manifest (depends on pkg-a and pkg-x)
+          cat > git-pm.json << MANIFEST
+          {
+              "packages": {
+                  "pkg-a": {
+                      "repo": "file://$(pwd)/packages/pkg-a",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  },
+                  "pkg-x": {
+                      "repo": "file://$(pwd)/packages/pkg-x",
+                      "ref": {"type": "tag", "value": "v1.0.0"}
+                  }
+              }
+          }
+          MANIFEST
+          
+          # Simulate installed packages (as install would create them)
+          mkdir -p .git-packages/{pkg-a,pkg-b,pkg-c,pkg-d,pkg-x}
+          
+          for pkg in pkg-a pkg-b pkg-c pkg-d pkg-x; do
+              cp packages/$pkg/README.md .git-packages/$pkg/
+              if [ -f packages/$pkg/git-pm.json ]; then
+                  cp packages/$pkg/git-pm.json .git-packages/$pkg/
+              fi
+          done
+          
+          # Create .git-pm.env as install would
+          cat > .git-pm.env << ENVEOF
+          GIT_PM_PACKAGES_DIR=$(pwd)/.git-packages
+          GIT_PM_PROJECT_ROOT=$(pwd)
+          GIT_PM_PACKAGE_pkg_a=$(pwd)/.git-packages/pkg-a
+          GIT_PM_PACKAGE_pkg_b=$(pwd)/.git-packages/pkg-b
+          GIT_PM_PACKAGE_pkg_c=$(pwd)/.git-packages/pkg-c
+          GIT_PM_PACKAGE_pkg_d=$(pwd)/.git-packages/pkg-d
+          GIT_PM_PACKAGE_pkg_x=$(pwd)/.git-packages/pkg-x
+          ENVEOF
+          
+          echo "✓ Test environment created"
+          echo ""
+          echo "Initial state:"
+          ls -1 .git-packages/
+          echo ""
+          
+          # TEST 1: Remove pkg-a (should cascade to pkg-b and pkg-c, but keep pkg-d)
+          echo "TEST 1: Removing pkg-a (deep nested removal test)"
+          echo "Expected: Remove pkg-a, pkg-b, pkg-c. Keep pkg-d (needed by pkg-x), Keep pkg-x"
+          echo ""
+          
+          python3 git-pm.py remove pkg-a -y
+          
+          echo ""
+          echo "Verifying deep nested removal..."
+          
+          # pkg-a should be removed
+          if [ -d ".git-packages/pkg-a" ]; then
+              echo "❌ FAIL: pkg-a still exists (should be removed)"
+              exit 1
+          fi
+          echo "✓ pkg-a removed (explicitly requested)"
+          
+          # pkg-b should be removed (only needed by pkg-a)
+          if [ -d ".git-packages/pkg-b" ]; then
+              echo "❌ FAIL: pkg-b still exists (should be removed - only needed by pkg-a)"
+              exit 1
+          fi
+          echo "✓ pkg-b removed (only depended on by pkg-a)"
+          
+          # pkg-c should be removed (only needed by pkg-a)
+          if [ -d ".git-packages/pkg-c" ]; then
+              echo "❌ FAIL: pkg-c still exists (should be removed - only needed by pkg-a)"
+              exit 1
+          fi
+          echo "✓ pkg-c removed (only depended on by pkg-a)"
+          
+          # pkg-d should be KEPT (still needed by pkg-x)
+          if [ ! -d ".git-packages/pkg-d" ]; then
+              echo "❌ FAIL: pkg-d was removed (should be KEPT - needed by pkg-x)"
+              exit 1
+          fi
+          echo "✓ pkg-d PRESERVED (still needed by pkg-x via deep nested reference)"
+          
+          # pkg-x should be KEPT (still in manifest)
+          if [ ! -d ".git-packages/pkg-x" ]; then
+              echo "❌ FAIL: pkg-x was removed (should be KEPT)"
+              exit 1
+          fi
+          echo "✓ pkg-x PRESERVED (still in manifest)"
+          
+          # Check manifest
+          if grep -q "pkg-a" git-pm.json; then
+              echo "❌ FAIL: pkg-a still in git-pm.json"
+              exit 1
+          fi
+          echo "✓ pkg-a removed from git-pm.json"
+          
+          # Check .git-pm.env
+          if grep -q "pkg_a" .git-pm.env; then
+              echo "❌ FAIL: pkg-a still in .git-pm.env"
+              exit 1
+          fi
+          echo "✓ pkg-a removed from .git-pm.env"
+          
+          if grep -q "pkg_b" .git-pm.env; then
+              echo "❌ FAIL: pkg-b still in .git-pm.env"
+              exit 1
+          fi
+          echo "✓ pkg-b removed from .git-pm.env"
+          
+          if grep -q "pkg_c" .git-pm.env; then
+              echo "❌ FAIL: pkg-c still in .git-pm.env"
+              exit 1
+          fi
+          echo "✓ pkg-c removed from .git-pm.env"
+          
+          if ! grep -q "pkg_d" .git-pm.env; then
+              echo "❌ FAIL: pkg-d removed from .git-pm.env (should be kept)"
+              exit 1
+          fi
+          echo "✓ pkg-d preserved in .git-pm.env"
+          
+          if ! grep -q "pkg_x" .git-pm.env; then
+              echo "❌ FAIL: pkg-x removed from .git-pm.env (should be kept)"
+              exit 1
+          fi
+          echo "✓ pkg-x preserved in .git-pm.env"
+          
+          echo ""
+          echo "Final state after removing pkg-a:"
+          ls -1 .git-packages/
+          echo ""
+          
+          # TEST 2: Now remove pkg-x (should also remove pkg-d since nothing needs it)
+          echo "TEST 2: Removing pkg-x (should now remove pkg-d too)"
+          echo "Expected: Remove pkg-x and pkg-d (no longer needed by anything)"
+          echo ""
+          
+          python3 git-pm.py remove pkg-x -y
+          
+          echo ""
+          echo "Verifying final removal..."
+          
+          # pkg-x should be removed
+          if [ -d ".git-packages/pkg-x" ]; then
+              echo "❌ FAIL: pkg-x still exists"
+              exit 1
+          fi
+          echo "✓ pkg-x removed"
+          
+          # pkg-d should now be removed (no longer needed)
+          if [ -d ".git-packages/pkg-d" ]; then
+              echo "❌ FAIL: pkg-d still exists (should be removed - no longer needed)"
+              exit 1
+          fi
+          echo "✓ pkg-d removed (no longer needed by any package)"
+          
+          # .git-packages should be empty or only contain empty directories
+          if [ "$(ls -A .git-packages 2>/dev/null)" ]; then
+              echo "❌ FAIL: .git-packages not empty"
+              ls -la .git-packages/
+              exit 1
+          fi
+          echo "✓ .git-packages is empty (all packages removed)"
+          
+          echo ""
+          echo "=========================================="
+          echo "✅ All deep nested dependency tests passed!"
+          echo "=========================================="
+          echo ""
+          echo "Verified:"
+          echo "  ✓ Deep nested packages removed when parent removed"
+          echo "  ✓ Shared dependencies preserved when other packages need them"
+          echo "  ✓ Cascade removal works through multiple levels"
+          echo "  ✓ Manifest and environment files updated correctly"
+          echo "  ✓ No packages remain when all references removed"
+
   test-python-versions:
     name: Python ${{ matrix.python-version }}
     strategy:
