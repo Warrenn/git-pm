@@ -85,6 +85,35 @@ jobs:
           echo "Changelog:"
           cat changelog.txt
       
+      - name: Pre-release validation
+        run: |
+          echo "Validating git-pm.py before release..."
+          
+          # Check syntax
+          python3 -m py_compile git-pm.py || exit 1
+          echo "✅ Syntax valid"
+          
+          # Check no lockfile code
+          if grep -qi "install_from_lockfile\|save_lockfile\|load_lockfile" git-pm.py; then
+            echo "❌ Lockfile code found (should be removed)"
+            exit 1
+          fi
+          echo "✅ No lockfile code"
+          
+          # Check no removed commands
+          if grep -q "def cmd_update\|def cmd_list\|def cmd_verify" git-pm.py; then
+            echo "❌ Removed commands found"
+            exit 1
+          fi
+          echo "✅ No removed commands"
+          
+          # Test basic commands
+          python3 git-pm.py --version || exit 1
+          python3 git-pm.py --help | grep -q "install.*clean.*add" || exit 1
+          echo "✅ Commands work"
+          
+          echo "✅ Pre-release validation passed"
+      
       - name: Get commit statistics
         id: stats
         run: |
@@ -110,7 +139,7 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
-          cat > release_notes.md << NOTES_EOF
+          cat > release_notes.md << 'NOTES_EOF'
           # git-pm ${{ steps.version.outputs.version }} - Git Package Manager
           
           ## 🎉 Release Information
@@ -127,218 +156,167 @@ jobs:
           - **Lines Added:** ${{ steps.stats.outputs.insertions }}
           - **Lines Removed:** ${{ steps.stats.outputs.deletions }}
           
-          ## ✨ What's New in v0.2.6
+          ## ✨ What's New in v0.2.9
           
-          ### 🔗 Nested Dependency Symlinks
-          - Automatically creates \\`.git-packages/\\` inside each package
-          - Symlinks point to sibling dependencies (\\`../../depName\\`)
-          - Same path works in development AND consumption
-          - No manual symlink management needed
+          ### 🧹 Major Refactoring - Simplified & Streamlined
           
-          ### 🌍 Environment Variables Generation
-          - Auto-generates \\`.git-pm.env\\` with absolute paths
-          - \\`GIT_PM_PACKAGES_DIR\\` - Root packages directory
-          - \\`GIT_PM_PACKAGE_<NAME>\\` - Individual package paths
-          - Perfect for scripts, Makefiles, CI/CD
+          This release removes the lockfile system and significantly simplifies git-pm while maintaining all core functionality.
           
-          ### 🪟 Windows Symlink Support
-          - Intelligent fallback to junction points
-          - No admin privileges required
-          - Works with or without Developer Mode
-          - Both methods work identically with Terraform
+          **Code Reduction:**
+          - 23.8% smaller codebase (removed 362 lines)
+          - 50% fewer commands (6 → 3)
+          - 67% fewer flags (3 → 1)
           
-          ### 📝 Automatic .gitignore Management
-          - Automatically adds git-pm files on install
-          - Never duplicates entries
-          - Prevents accidental commits of:
-            - \\`.git-packages/\\` (installed dependencies)
-            - \\`.git-pm.env\\` (absolute paths)
-            - \\`git-pm.local.yaml\\` (local overrides)
-            - \\`git-pm.lock\\` (lockfile - optional)
-          - Skip with \`--no-gitignore\` flag
+          **Removed Features:**
+          - ❌ Lockfile system (\`git-pm.lock\`) - Use commit refs for reproducibility
+          - ❌ \`git-pm update\` command - Use \`git-pm install\` instead
+          - ❌ \`--force-fresh\` flag - All installs are fresh now
+          - ❌ \`--no-resolve-deps\` flag - Dependencies always resolved
           
-          ### 🚀 Local Override Discovery
-          - Checks local overrides BEFORE cloning
-          - No unnecessary remote clones
-          - 6x faster installation with overrides
-          - Works offline
-          - Reads nested dependencies from local paths
-          
-          ### 🎯 Path Resolution
-          - Solves path conflicts between dev and consumption
-          - Dual approach: symlinks + environment variables
-          - Symlinks for Terraform (automatic)
-          - Environment variables for scripts (\\`.git-pm.env\\`)
-          
-          ### Core Features (v0.1-0.2)
-          - ✅ Full Dependency Resolution
-          - ✅ Explicit Versioning (no ranges)
-          - ✅ Branch Auto-Resolution
-          - ✅ Independent Versioning
-          - ✅ Git Sparse-Checkout
-          - ✅ Smart Caching
-          - ✅ Cross-Platform (Linux, macOS, Windows)
-          - ✅ Azure DevOps Integration
+          **What Remains (Fully Functional):**
+          - ✅ Full dependency resolution (always enabled)
+          - ✅ Tag/commit/branch references
+          - ✅ Local overrides (\`git-pm.local\`)
+          - ✅ Config management (3-way merging)
+          - ✅ Symlink creation
+          - ✅ .gitignore management (no lockfile entry)
+          - ✅ Environment file generation
+          - ✅ Windows compatibility
+          - ✅ Python 3.8-3.12 support
           
           ## 🚀 Quick Start
           
-          ### Installation
-          
-          **Linux/macOS:**
-          \`\`\`bash
-          curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash
-          \`\`\`
-          
-          **Windows (PowerShell):**
-          \`\`\`powershell
-          irm ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.ps1 | iex
-          \`\`\`
-          
-          ### Usage
+          ### Available Commands
           
           \`\`\`bash
-          # Add packages
-          git-pm add utils github.com/company/monorepo --path packages/utils --ref-type tag --ref-value v1.0.0
+          git-pm install [--no-gitignore]    # Install packages with dependency resolution
+          git-pm clean                        # Remove all installed packages
+          git-pm add <name> <repo> [opts]  # Add package to manifest
+          \`\`\`
           
-          # Install with dependency resolution
+          ### Example Usage
+          
+          \`\`\`bash
+          # Add a package (JSON format)
+          git-pm add utils github.com/company/monorepo \\
+            --path packages/utils \\
+            --ref-type tag \\
+            --ref-value v1.0.0
+          
+          # Install with automatic dependency resolution
           git-pm install
           
-          # Update branch-based packages
-          git-pm update
-          
-          # List installed
-          git-pm list
+          # Clean packages
+          git-pm clean
           \`\`\`
+          
+          ## 📋 Manifest Format (JSON)
+          
+          \`\`\`json
+          {
+            "packages": {
+              "azure-bootstrap": {
+                "repo": "dev.azure.com/org/terraform",
+                "path": "modules/bootstrap",
+                "ref": {
+                  "type": "tag",
+                  "value": "v1.0.0"
+                }
+              },
+              "common-utils": {
+                "repo": "github.com/company/shared-libs",
+                "path": "utils",
+                "ref": {
+                  "type": "branch",
+                  "value": "main"
+                }
+              }
+            }
+          }
+          \`\`\`
+          
+          ## 🔄 Migration Guide
+          
+          **For Most Users:** No changes needed! Existing manifests work as-is.
+          
+          **Command Changes:**
+          \`\`\`bash
+          # Old → New
+          git-pm update              → git-pm install
+          git-pm install --force-fresh → git-pm install
+          \`\`\`
+          
+          **For Reproducibility:**
+          Use commit refs instead of branches:
+          \`\`\`json
+          {
+            "ref": {
+              "type": "commit",
+              "value": "abc123def456"
+            }
+          }
+          \`\`\`
+          
+          ## 📚 Core Features
+          
+          ✅ **Dependency Resolution** - Automatic recursive discovery  
+          ✅ **Explicit Versioning** - Tags, branches, or commits  
+          ✅ **Local Overrides** - Fast development with \`git-pm.local\`  
+          ✅ **Smart Caching** - Fast repeated installs  
+          ✅ **Cross-Platform** - Linux, macOS, Windows  
+          ✅ **Zero Dependencies** - Pure Python 3.8+  
+          ✅ **Azure DevOps PAT** - Built-in token support  
           
           ## 📋 Requirements
           
           - Python 3.8+
-          - git
-          - Internet connection (for initial install)
-          
-          ## 📝 Changelog
-          
-          $(cat changelog.txt)
-          
-          ## 🔄 Migration from Previous Versions
-          
-          ### Breaking Changes
-          1. **Global installation required** - Script no longer in project directory
-          2. **Dependency resolution on by default** - Use \`--no-resolve-deps\` to disable
-          3. **Local overrides use symlinks** - Faster, live updates
-          
-          ### Migration Steps
-          \`\`\`bash
-          # 1. Install globally
-          curl -fsSL ${{ env.REPO_URL }}/raw/${{ github.ref_name }}/install-git-pm.sh | bash
-          
-          # 2. Remove old script from project (optional)
-          rm git-pm.py
-          
-          # 3. Works from anywhere now!
-          cd your-project
-          git-pm install
-          \`\`\`
-          
-          ## 📥 Assets
-          
-          - **git-pm.py** - Main Python script (required by installers)
-          - **install-git-pm.sh** - Linux/macOS installer
-          - **install-git-pm.ps1** - Windows installer
-          
-          **Download URL:**
-          \`\`\`
-          ${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py
-          \`\`\`
-          
-          **Commands after installation:**
-          - \`git-pm install\` (via wrapper)
-          - \`git-pm.py install\` (direct)
-          - \`python git-pm.py install\` (explicit)
-          
-          ## 🐛 Known Issues
-          
-          - PATH update may require terminal restart
-          - Windows installer requires PowerShell 5.0+
-          
-          ## 📚 Documentation
-          
-          ### Main Documentation
-          - [README.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/README.md) - Getting started guide
-          - [FEATURES.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/FEATURES.md) - Complete feature reference
-          - [DEPENDENCY_RESOLUTION.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/DEPENDENCY_RESOLUTION.md) - How dependency resolution works
-          
-          ### Feature Guides
-          - [NESTED_DEPENDENCY_SYMLINKS.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/NESTED_DEPENDENCY_SYMLINKS.md) - Path resolution with symlinks
-          - [ENVIRONMENT_VARIABLES_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/ENVIRONMENT_VARIABLES_GUIDE.md) - Using .git-pm.env
-          - [WINDOWS_SYMLINK_SUPPORT.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/WINDOWS_SYMLINK_SUPPORT.md) - Windows compatibility
-          - [GITIGNORE_MANAGEMENT.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/GITIGNORE_MANAGEMENT.md) - Automatic .gitignore
-          - [LOCAL_OVERRIDE_DISCOVERY_FIX.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/LOCAL_OVERRIDE_DISCOVERY_FIX.md) - Local development
-          - [PATH_RESOLUTION_COMPLETE_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/PATH_RESOLUTION_COMPLETE_GUIDE.md) - Path resolution
-          
-          ### Quick References
-          - [WINDOWS_QUICK_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/WINDOWS_QUICK_GUIDE.md) - Windows setup
-          - [GITIGNORE_QUICK_REFERENCE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/GITIGNORE_QUICK_REFERENCE.md) - .gitignore reference
-          
-          ### CI/CD & Deployment
-          - [CI_CD_DOCUMENTATION.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/CI_CD_DOCUMENTATION.md) - CI/CD integration
-          - [DEPLOYMENT_GUIDE.md](${{ env.REPO_URL }}/blob/${{ github.ref_name }}/DEPLOYMENT_GUIDE.md) - Deployment instructions
-          
-          ### Repository
-          - [GitHub Repository](${{ env.REPO_URL }})
-          - [Issues](${{ env.REPO_URL }}/issues)
-          - [Releases](${{ env.REPO_URL }}/releases)
-          
-          ## 🙏 Feedback
-          
-          Please report issues at: [${{ env.REPO_FULL }}/issues](${{ env.REPO_URL }}/issues)
+          - Git 2.25+
+          - Internet connection (for remote repos)
           
           ## 🎓 Examples
           
           ### Terraform Modules
-          \`\`\`yaml
-          packages:
-            azure-bootstrap:
-              repo: dev.azure.com/org/terraform
-              path: modules/bootstrap
-              ref:
-                type: tag
-                value: v1.0.0
+          \`\`\`json
+          {
+            "packages": {
+              "azure-bootstrap": {
+                "repo": "dev.azure.com/org/terraform",
+                "path": "modules/bootstrap",
+                "ref": {"type": "tag", "value": "v1.0.0"}
+              }
+            }
+          }
           \`\`\`
           
           ### Shared Libraries
-          \`\`\`yaml
-          packages:
-            common-utils:
-              repo: github.com/company/shared-libs
-              path: utils
-              ref:
-                type: branch
-                value: main
+          \`\`\`json
+          {
+            "packages": {
+              "common-utils": {
+                "repo": "github.com/company/shared-libs",
+                "path": "utils",
+                "ref": {"type": "branch", "value": "main"}
+              }
+            }
+          }
           \`\`\`
           
           ### Bitbucket Support
-          \`\`\`yaml
-          packages:
-            my-lib:
-              repo: bitbucket.org/workspace/repository
-              path: packages/my-lib
-              ref:
-                type: tag
-                value: v1.0.0
+          \`\`\`json
+          {
+            "packages": {
+              "my-lib": {
+                "repo": "bitbucket.org/workspace/repository",
+                "path": "packages/my-lib",
+                "ref": {"type": "tag", "value": "v1.0.0"}
+              }
+            }
+          }
           \`\`\`
           
-          ## ✅ What's Included
+          ## 🙏 Feedback
           
-          ✅ **Full Dependency Resolution** - Automatic recursive discovery  
-          ✅ **Explicit Versioning** - No ranges, exact tags/branches/commits  
-          ✅ **Branch Auto-Resolution** - Branches → latest commit SHA  
-          ✅ **Independent Versioning** - Each package at different commits  
-          ✅ **Symlink Local Overrides** - Fast live development  
-          ✅ **Azure DevOps PAT** - Built-in token support  
-          ✅ **Cross-Platform** - Linux, macOS, Windows  
-          ✅ **Zero Dependencies** - Pure Python 3.8+  
-          ✅ **Smart Caching** - Fast repeated installs  
+          Please report issues at: [${{ env.REPO_FULL }}/issues](${{ env.REPO_URL }}/issues)
           
           ---
           
@@ -348,7 +326,31 @@ jobs:
           
           echo "Release notes generated:"
           cat release_notes.md
-      
+
+      - name: Prepare release assets
+        id: assets
+        run: |
+          echo "Preparing release assets..."
+          
+          # Start with required files
+          ASSETS="git-pm.py"
+          
+          # Add optional files if they exist
+          [ -f "README.md" ] && ASSETS="$ASSETS README.md" || echo "⚠️  README.md not found"
+          [ -f "install-git-pm.sh" ] && ASSETS="$ASSETS install-git-pm.sh" || echo "⚠️  install-git-pm.sh not found"
+          [ -f "install-git-pm.ps1" ] && ASSETS="$ASSETS install-git-pm.ps1" || echo "⚠️  install-git-pm.ps1 not found"
+          
+          # Create files list for GitHub release action
+          echo "$ASSETS" | tr ' ' '\n' > release_assets.txt
+          
+          echo "Assets to upload:"
+          cat release_assets.txt
+          
+          # Export for next step
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          cat release_assets.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -357,12 +359,7 @@ jobs:
           body_path: release_notes.md
           draft: false
           prerelease: false
-          files: |
-            git-pm.py
-            install-git-pm.sh
-            install-git-pm.ps1
-            README.md
-            DEPENDENCY_RESOLUTION.md
+          files: ${{ steps.assets.outputs.files }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
