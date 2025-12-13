@@ -104,23 +104,31 @@ def test_lockfile_reproducible_builds():
     
     with tempfile.TemporaryDirectory() as tmpdir:
         project_dir = Path(tmpdir) / "project"
-        mock_repo_dir = Path(tmpdir) / "mock-repo"
+        bare_repo_dir = Path(tmpdir) / "mock-repo.git"
+        work_repo_dir = Path(tmpdir) / "mock-repo-work"
         
-        # Create mock repo
-        mock_repo_dir.mkdir()
-        os.chdir(mock_repo_dir)
-        run_command("git init")
+        # Create bare repository (can be cloned, not symlinked)
+        bare_repo_dir.mkdir()
+        os.chdir(bare_repo_dir)
+        run_command("git init --bare")
+        
+        # Create working repository to commit to bare
+        work_repo_dir.mkdir()
+        os.chdir(work_repo_dir)
+        run_command(f"git clone {bare_repo_dir} .")
         run_command("git config user.email 'test@test.com'")
         run_command("git config user.name 'Test User'")
         
-        (mock_repo_dir / "file.txt").write_text("v1")
+        (work_repo_dir / "file.txt").write_text("v1")
         run_command("git add .")
         run_command("git commit -m 'v1'")
         run_command("git branch -M main")  # Ensure branch is named 'main'
+        run_command("git push origin main")
         
-        (mock_repo_dir / "file.txt").write_text("v2")
+        (work_repo_dir / "file.txt").write_text("v2")
         run_command("git add .")
         run_command("git commit -m 'v2'")
+        run_command("git push origin main")
         
         # Create project
         project_dir.mkdir()
@@ -131,10 +139,11 @@ def test_lockfile_reproducible_builds():
         run_command("git config user.email 'test@test.com'")
         run_command("git config user.name 'Test User'")
         
+        # Use bare repo URL (forces git clone, not symlink)
         manifest = {
             "packages": {
                 "test-pkg": {
-                    "repo": f"file://{mock_repo_dir}",
+                    "repo": str(bare_repo_dir),  # Bare repo path (no file://)
                     "ref": {"type": "branch", "value": "main"}
                 }
             }
