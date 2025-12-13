@@ -1,5 +1,5 @@
 #!/bin/bash
-# Comprehensive test script for git-pm
+# Comprehensive test script for git-pm (lockfile-free)
 # LOCATION: ./tests/test-git-pm.sh
 
 set -e
@@ -110,7 +110,7 @@ EOF
 }
 
 test_basic_install() {
-    print_header "TEST 1: Basic Install (JSON)"
+    print_header "TEST 1: Basic Install"
     
     local project_dir="$TEST_DIR/test-project-1"
     setup_gitpm_in_project "$project_dir"
@@ -133,17 +133,11 @@ EOF
     [ -d ".git-packages/utils" ] || { print_error "Package not installed"; return 1; }
     print_success "Package installed"
     
-    [ -f "git-pm.lock" ] || { print_error "Lockfile missing"; return 1; }
-    print_success "Lockfile created"
-    
-    $PYTHON -c "import json; json.load(open('git-pm.lock'))" || { print_error "Invalid lockfile"; return 1; }
-    print_success "Lockfile is valid JSON"
-    
     cd "$TEST_DIR"
 }
 
 test_local_override() {
-    print_header "TEST 2: Local Override (New Schema)"
+    print_header "TEST 2: Local Override"
     
     local project_dir="$TEST_DIR/test-project-2"
     setup_gitpm_in_project "$project_dir"
@@ -182,130 +176,60 @@ EOF
     cd "$TEST_DIR"
 }
 
-test_verify_command() {
-    print_header "TEST 3: Verify Command"
+test_dependency_resolution() {
+    print_header "TEST 3: Dependency Resolution"
     
     local project_dir="$TEST_DIR/test-project-3"
-    setup_gitpm_in_project "$project_dir"
-    cd "$project_dir"
+    local pkg_a="$TEST_DIR/pkg-a"
+    local pkg_b="$TEST_DIR/pkg-b"
     
-    cat > git-pm.json << EOF
+    # Create package A (no dependencies)
+    mkdir -p "$pkg_a"
+    echo "Package A" > "$pkg_a/README.md"
+    cat > "$pkg_a/git-pm.json" << EOF
+{"packages": {}}
+EOF
+    
+    # Create package B (depends on A)
+    mkdir -p "$pkg_b"
+    echo "Package B" > "$pkg_b/README.md"
+    cat > "$pkg_b/git-pm.json" << EOF
 {
     "packages": {
-        "utils": {
-            "repo": "file://$TEST_DIR/mock-repos/test-repo",
-            "path": "packages/utils",
-            "ref": {"type": "tag", "value": "v1.0.0"}
+        "pkg-a": {
+            "repo": "file://$pkg_a"
         }
     }
 }
 EOF
     
-    run_gitpm install > /dev/null 2>&1
-    
-    run_gitpm verify > /dev/null 2>&1 || { print_error "Verify failed on valid"; return 1; }
-    print_success "Verify passes"
-    
-    rm -rf .git-packages/utils
-    
-    run_gitpm verify > /dev/null 2>&1 && { print_error "Verify didn't detect corruption"; return 1; }
-    print_success "Verify detects corruption"
-    
-    cd "$TEST_DIR"
-}
-
-test_reproducible_builds() {
-    print_header "TEST 4: Reproducible Builds"
-    
-    local project_dir="$TEST_DIR/test-project-4"
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
+    # Project depends on B (should auto-discover A)
     cat > git-pm.json << EOF
 {
     "packages": {
-        "utils": {
-            "repo": "file://$TEST_DIR/mock-repos/test-repo",
-            "path": "packages/utils",
-            "ref": {"type": "branch", "value": "develop"}
+        "pkg-b": {
+            "repo": "file://$pkg_b"
         }
     }
 }
 EOF
     
-    run_gitpm install > /dev/null 2>&1
+    run_gitpm install
     
-    local locked=$($PYTHON -c "import json; print(json.load(open('git-pm.lock'))['packages']['utils']['commit'])")
-    print_info "Locked: ${locked:0:8}"
+    [ -d ".git-packages/pkg-a" ] || { print_error "Dependency A not installed"; return 1; }
+    [ -d ".git-packages/pkg-b" ] || { print_error "Package B not installed"; return 1; }
+    print_success "Dependencies auto-discovered"
     
-    run_gitpm clean > /dev/null 2>&1
-    run_gitpm install > /dev/null 2>&1
-    
-    local new=$($PYTHON -c "import json; print(json.load(open('git-pm.lock'))['packages']['utils']['commit'])")
-    
-    [ "$locked" = "$new" ] || { print_error "Not reproducible"; return 1; }
-    print_success "Reproducible build"
-    
-    cd "$TEST_DIR"
-}
-
-test_force_fresh() {
-    print_header "TEST 5: Force Fresh Flag"
-    
-    local project_dir="$TEST_DIR/test-project-5"
-    setup_gitpm_in_project "$project_dir"
-    cd "$project_dir"
-    
-    cat > git-pm.json << EOF
-{
-    "packages": {
-        "utils": {
-            "repo": "file://$TEST_DIR/mock-repos/test-repo",
-            "path": "packages/utils",
-            "ref": {"type": "tag", "value": "v1.0.0"}
-        }
-    }
-}
-EOF
-    
-    run_gitpm install > /dev/null 2>&1
-    
-    run_gitpm install --force-fresh 2>&1 | grep -q "Forcing fresh" || { print_error "Flag didn't work"; return 1; }
-    print_success "--force-fresh works"
-    
-    cd "$TEST_DIR"
-}
-
-test_list_command() {
-    print_header "TEST 6: List Command"
-    
-    local project_dir="$TEST_DIR/test-project-6"
-    setup_gitpm_in_project "$project_dir"
-    cd "$project_dir"
-    
-    cat > git-pm.json << EOF
-{
-    "packages": {
-        "utils": {
-            "repo": "file://$TEST_DIR/mock-repos/test-repo",
-            "path": "packages/utils",
-            "ref": {"type": "tag", "value": "v1.0.0"}
-        }
-    }
-}
-EOF
-    
-    run_gitpm install > /dev/null 2>&1
-    run_gitpm list
-    
-    print_success "List command works"
     cd "$TEST_DIR"
 }
 
 test_clean_command() {
-    print_header "TEST 7: Clean Command"
+    print_header "TEST 4: Clean Command"
     
-    local project_dir="$TEST_DIR/test-project-7"
+    local project_dir="$TEST_DIR/test-project-4"
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
@@ -331,9 +255,9 @@ EOF
 }
 
 test_add_command() {
-    print_header "TEST 8: Add Command"
+    print_header "TEST 5: Add Command"
     
-    local project_dir="$TEST_DIR/test-project-8"
+    local project_dir="$TEST_DIR/test-project-5"
     setup_gitpm_in_project "$project_dir"
     cd "$project_dir"
     
@@ -352,7 +276,7 @@ test_add_command() {
 }
 
 main() {
-    print_header "git-pm Test Suite (from ./tests/)"
+    print_header "git-pm Test Suite (Lockfile-Free)"
     
     setup_test_env
     create_mock_repo "test-repo"
@@ -362,24 +286,18 @@ main() {
     case "${1:-all}" in
         "basic") test_basic_install ;;
         "override") test_local_override ;;
-        "verify") test_verify_command ;;
-        "reproducible") test_reproducible_builds ;;
-        "force-fresh") test_force_fresh ;;
-        "list") test_list_command ;;
+        "deps") test_dependency_resolution ;;
         "clean") test_clean_command ;;
         "add") test_add_command ;;
         "all")
             test_basic_install
             test_local_override
-            test_verify_command
-            test_reproducible_builds
-            test_force_fresh
-            test_list_command
+            test_dependency_resolution
             test_clean_command
             test_add_command
             ;;
         *)
-            echo "Usage: $0 [basic|override|verify|reproducible|force-fresh|list|clean|add|all]"
+            echo "Usage: $0 [basic|override|deps|clean|add|all]"
             exit 1
             ;;
     esac

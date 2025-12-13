@@ -1,5 +1,5 @@
 #!/bin/bash
-# Simple isolated test for git-pm
+# Simple isolated test for git-pm (no lockfile tests)
 # LOCATION: ./tests/simple-test.sh
 
 set -e
@@ -19,7 +19,7 @@ fi
 TEST_ROOT="/tmp/git-pm-test-$$"
 
 echo "============================================"
-echo "git-pm Simple Test (from ./tests/)"
+echo "git-pm Simple Test (Lockfile-Free)"
 echo "============================================"
 echo "Repository: $REPO_ROOT"
 echo "Test location: $TEST_ROOT"
@@ -114,19 +114,6 @@ echo "   ✓ Package directory"
 [ ! -f ".git-packages/mylib/mylib.py" ] && echo "   ✗ No package files" && exit 1
 echo "   ✓ Package files"
 
-[ ! -f "git-pm.lock" ] && echo "   ✗ No lockfile" && exit 1
-echo "   ✓ Lockfile (JSON)"
-
-# Verify lockfile is valid JSON
-python3 << 'PYEOF'
-import json
-with open("git-pm.lock") as f:
-    lock = json.load(f)
-    if "packages" not in lock or "installation_order" not in lock:
-        raise Exception("Invalid lockfile")
-print("   ✓ Lockfile valid JSON")
-PYEOF
-
 echo ""
 echo "7. Testing imports..."
 python3 << 'PYEOF'
@@ -139,23 +126,12 @@ assert add(2, 3) == 5
 PYEOF
 
 echo ""
-echo "8. Testing verify..."
-python3 git-pm.py verify
-if [ $? -eq 0 ]; then
-    echo "   ✓ Verify passed"
-else
-    echo "   ✗ Verify failed"
-    exit 1
-fi
+echo "8. Testing dependency resolution..."
+python3 git-pm.py install 2>&1 | grep -q "Discovering dependencies" && echo "   ✓ Dependencies resolved" || echo "   ⚠️  Dependency resolution not mentioned"
 
 echo ""
-echo "9. Testing reproducible build..."
-python3 git-pm.py clean
-python3 git-pm.py install 2>&1 | grep -q "Lockfile found" && echo "   ✓ Used lockfile" || echo "   ⚠️  Lockfile not mentioned"
-
-echo ""
-echo "10. List packages..."
-python3 git-pm.py list
+echo "9. List packages..."
+ls -la .git-packages/
 
 echo ""
 echo "============================================"

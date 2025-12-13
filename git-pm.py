@@ -19,7 +19,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Fix Windows encoding issues with Unicode characters (emojis)
 if sys.platform == 'win32':
     # Set UTF-8 encoding for stdout and stderr
     import io
