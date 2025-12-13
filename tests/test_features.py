@@ -116,6 +116,7 @@ def test_lockfile_reproducible_builds():
         (mock_repo_dir / "file.txt").write_text("v1")
         run_command("git add .")
         run_command("git commit -m 'v1'")
+        run_command("git branch -M main")  # Ensure branch is named 'main'
         
         (mock_repo_dir / "file.txt").write_text("v2")
         run_command("git add .")
@@ -149,9 +150,22 @@ def test_lockfile_reproducible_builds():
         with open("git-pm.lock") as f:
             lockfile = json.load(f)
         
-        locked_commit = lockfile.get("packages", {}).get("test-pkg", {}).get("commit")
+        # Check if packages exist in lockfile
+        if "packages" not in lockfile:
+            print("  ❌ No packages in lockfile")
+            print(f"     Lockfile content: {lockfile}")
+            return False
+        
+        # Check if test-pkg exists
+        if "test-pkg" not in lockfile.get("packages", {}):
+            print("  ❌ test-pkg not in lockfile")
+            print(f"     Packages: {list(lockfile.get('packages', {}).keys())}")
+            return False
+        
+        locked_commit = lockfile["packages"]["test-pkg"].get("commit")
         if not locked_commit:
             print("  ❌ No commit in lockfile")
+            print(f"     test-pkg data: {lockfile['packages']['test-pkg']}")
             return False
         
         print(f"  ✓ Locked to: {locked_commit[:8]}")
@@ -202,10 +216,13 @@ def test_verify_command():
             print("  ❌ Verify failed")
             return False
         
-        # Corrupt
+        # Corrupt - handle both symlinks and directories
         pkg_path = Path(".git-packages") / "test-pkg"
         if pkg_path.exists():
-            shutil.rmtree(pkg_path)
+            if pkg_path.is_symlink():
+                pkg_path.unlink()  # Remove symlink
+            else:
+                shutil.rmtree(pkg_path)  # Remove directory
         
         code, _, _ = run_command("python3 git-pm.py verify")
         if code != 0:
