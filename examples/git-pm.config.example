@@ -1,0 +1,14 @@
+{
+    "packages_dir": ".git-packages",
+    "cache_dir": "/home/user/.cache/git-pm",
+    "git_protocol": {
+        "github.com": "ssh",
+        "gitlab.com": "ssh",
+        "dev.azure.com": "https"
+    },
+    "url_patterns": {
+        "internal.company.com": "https://internal.company.com/git/{path}.git",
+        "bitbucket.company.com": "https://oauth2:{token}@bitbucket.company.com/{path}.git"
+    },
+    "azure_devops_pat": ""
+}

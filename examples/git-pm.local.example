@@ -1,0 +1,10 @@
+{
+    "packages": {
+        "my-package": {
+            "repo": "../local-dev-version"
+        },
+        "another": {
+            "repo": "file:///home/user/projects/pkg"
+        }
+    }
+}

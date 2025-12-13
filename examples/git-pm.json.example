@@ -1,0 +1,28 @@
+{
+    "packages": {
+        "terraform-vpc": {
+            "repo": "github.com/terraform-aws-modules/terraform-aws-vpc",
+            "path": "",
+            "ref": {
+                "type": "tag",
+                "value": "v5.0.0"
+            }
+        },
+        "terraform-s3": {
+            "repo": "github.com/terraform-aws-modules/terraform-aws-s3-bucket",
+            "path": "",
+            "ref": {
+                "type": "branch",
+                "value": "master"
+            }
+        },
+        "internal-module": {
+            "repo": "dev.azure.com/myorg/myproject/_git/terraform-modules",
+            "path": "modules/networking",
+            "ref": {
+                "type": "commit",
+                "value": "abc123def456abc123def456abc123def456abc1"
+            }
+        }
+    }
+}

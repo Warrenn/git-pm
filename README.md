@@ -1,8 +1,6 @@
 # git-pm - Git Package Manager
 
-A lightweight, dependency-resolving package manager that uses git sparse-checkout to manage packages from monorepos and regular repositories.
-
-**Version 0.2.0** - Full dependency resolution with explicit versioning
+A lightweight, dependency-resolving package manager that uses git sparse-checkout to manage packages from monorepos and regular repositories. Includes full dependency resolution with explicit versioning.
 
 ## Features
 
@@ -18,9 +16,6 @@ A lightweight, dependency-resolving package manager that uses git sparse-checkou
 ✅ **Azure DevOps Support** - Built-in PAT token injection for CI/CD  
 ✅ **Git Sparse-Checkout** - Efficient cloning of monorepo subdirectories  
 ✅ **Smart Caching** - Fast repeated installs with intelligent cache management  
-
-### New in v0.2.0
-
 ✅ **Nested Dependency Symlinks** - Automatically creates symlinks inside packages for their dependencies  
 ✅ **Environment Variables** - Auto-generates `.git-pm.env` with package paths for scripts  
 ✅ **Windows Symlink Support** - Intelligent fallback to junction points on Windows (no admin required)  
