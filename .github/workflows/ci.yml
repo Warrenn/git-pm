@@ -23,8 +23,8 @@ jobs:
       
       - name: Run feature tests
         run: |
-          echo "Testing features from ./tests/test-features.py..."
-          python3 tests/test-features.py
+          echo "Testing features from ./tests/test_features.py..."
+          python3 tests/test_features.py
           
           if [ $? -eq 0 ]; then
             echo "✅ All feature tests passed"
@@ -473,6 +473,267 @@ jobs:
           echo "  ✓ Manifest and environment files updated correctly"
           echo "  ✓ No packages remain when all references removed"
 
+  test-config-command:
+    name: Config Command Tests
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Run comprehensive config test suite
+        run: |
+          echo "============================================"
+          echo "Running comprehensive config command tests"
+          echo "============================================"
+          echo ""
+          
+          # Run the comprehensive test suite
+          chmod +x tests/test-config-command.sh
+          bash tests/test-config-command.sh
+          
+          echo ""
+          echo "✅ Comprehensive test suite passed"
+          echo ""
+      
+      - name: Test config command specific requirements
+        run: |
+          echo "============================================"
+          echo "Testing specific config command requirements"
+          echo "============================================"
+          echo ""
+          
+          # Setup test environment
+          TEST_DIR="config-ci-test"
+          mkdir -p "$TEST_DIR"
+          cd "$TEST_DIR"
+          
+          # Backup user config if it exists
+          if [ -f ~/.git-pm/config ]; then
+            cp ~/.git-pm/config ~/.git-pm/config.ci-backup
+            echo "✓ Backed up existing user config"
+          fi
+          
+          # Remove user config for clean test
+          rm -f ~/.git-pm/config
+          
+          # Copy git-pm.py
+          cp ../git-pm.py .
+          
+          # Initialize minimal project
+          cat > git-pm.json << 'EOF'
+          {
+              "packages": {}
+          }
+          EOF
+          
+          git init
+          git config user.email "ci@test.com"
+          git config user.name "CI Test"
+          
+          echo "✓ Test environment ready"
+          echo ""
+          
+          # TEST 1: Set at project level
+          echo "TEST 1: Set at project level"
+          python3 git-pm.py config packages_dir ".ci-deps" > /dev/null 2>&1
+          
+          if [ -f "git-pm.config" ]; then
+            if grep -q ".ci-deps" git-pm.config; then
+              echo "✅ Set at project level works"
+            else
+              echo "❌ Project config doesn't contain expected value"
+              exit 1
+            fi
+          else
+            echo "❌ Project config file not created"
+            exit 1
+          fi
+          echo ""
+          
+          # TEST 2: Get at project level
+          echo "TEST 2: Get at project level"
+          VALUE=$(python3 git-pm.py config packages_dir)
+          if [ "$VALUE" = ".ci-deps" ]; then
+            echo "✅ Get at project level works"
+          else
+            echo "❌ Expected '.ci-deps', got: $VALUE"
+            exit 1
+          fi
+          echo ""
+          
+          # TEST 3: Set at global level
+          echo "TEST 3: Set at global level"
+          python3 git-pm.py config --global cache_dir "/tmp/ci-cache" > /dev/null 2>&1
+          
+          if [ -f ~/.git-pm/config ]; then
+            if grep -q "/tmp/ci-cache" ~/.git-pm/config; then
+              echo "✅ Set at global level works"
+            else
+              echo "❌ User config doesn't contain expected value"
+              exit 1
+            fi
+          else
+            echo "❌ User config file not created"
+            exit 1
+          fi
+          echo ""
+          
+          # TEST 4: Get at global level
+          echo "TEST 4: Get at global level"
+          VALUE=$(python3 git-pm.py config cache_dir)
+          if [ "$VALUE" = "/tmp/ci-cache" ]; then
+            echo "✅ Get at global level works"
+          else
+            echo "❌ Expected '/tmp/ci-cache', got: $VALUE"
+            exit 1
+          fi
+          echo ""
+          
+          # TEST 5: List shows defaults, project, and user values
+          echo "TEST 5: List shows defaults, project, and user values"
+          OUTPUT=$(python3 git-pm.py config --list)
+          
+          # Check for default values
+          if echo "$OUTPUT" | grep -q "(default)"; then
+            echo "  ✓ Shows default values"
+          else
+            echo "  ❌ Doesn't show default values"
+            exit 1
+          fi
+          
+          # Check for project values
+          if echo "$OUTPUT" | grep -q "(project)"; then
+            echo "  ✓ Shows project values"
+          else
+            echo "  ❌ Doesn't show project values"
+            exit 1
+          fi
+          
+          # Check for user values
+          if echo "$OUTPUT" | grep -q "(user)"; then
+            echo "  ✓ Shows user values"
+          else
+            echo "  ❌ Doesn't show user values"
+            exit 1
+          fi
+          
+          echo "✅ List shows all value types (default, project, user)"
+          echo ""
+          
+          # TEST 6: List shows source of value
+          echo "TEST 6: List shows source of value"
+          OUTPUT=$(python3 git-pm.py config --list)
+          
+          # Check that packages_dir shows as project source
+          if echo "$OUTPUT" | grep "packages_dir=" | grep -q "(project)"; then
+            echo "  ✓ Shows project source for project-level value"
+          else
+            echo "  ❌ Doesn't show correct source for project value"
+            exit 1
+          fi
+          
+          # Check that cache_dir shows as user source
+          if echo "$OUTPUT" | grep "cache_dir=" | grep -q "(user)"; then
+            echo "  ✓ Shows user source for user-level value"
+          else
+            echo "  ❌ Doesn't show correct source for user value"
+            exit 1
+          fi
+          
+          # Check that a default value shows as default source
+          if echo "$OUTPUT" | grep "git_protocol=" | grep -q "(default)"; then
+            echo "  ✓ Shows default source for default value"
+          else
+            echo "  ❌ Doesn't show correct source for default value"
+            exit 1
+          fi
+          
+          echo "✅ List correctly shows source of each value"
+          echo ""
+          
+          # TEST 7: Unset at project level
+          echo "TEST 7: Unset at project level"
+          python3 git-pm.py config --unset packages_dir > /dev/null 2>&1
+          
+          # Check that it's removed from project config
+          if grep -q "packages_dir" git-pm.config 2>/dev/null; then
+            echo "❌ Value still in project config after unset"
+            exit 1
+          else
+            echo "  ✓ Removed from project config"
+          fi
+          
+          # Check that value falls back to default
+          VALUE=$(python3 git-pm.py config packages_dir)
+          if [ "$VALUE" = ".git-packages" ]; then
+            echo "  ✓ Falls back to default after unset"
+          else
+            echo "  ❌ Didn't fall back to default, got: $VALUE"
+            exit 1
+          fi
+          
+          echo "✅ Unset at project level works"
+          echo ""
+          
+          # TEST 8: Unset at global level
+          echo "TEST 8: Unset at global level"
+          python3 git-pm.py config --unset --global cache_dir > /dev/null 2>&1
+          
+          # Check that it's removed from user config
+          if grep -q "cache_dir" ~/.git-pm/config 2>/dev/null; then
+            echo "❌ Value still in user config after unset"
+            exit 1
+          else
+            echo "  ✓ Removed from user config"
+          fi
+          
+          # Check that value falls back to default
+          VALUE=$(python3 git-pm.py config cache_dir)
+          EXPECTED="$HOME/.cache/git-pm"
+          if [ "$VALUE" = "$EXPECTED" ]; then
+            echo "  ✓ Falls back to default after unset"
+          else
+            echo "  ❌ Didn't fall back to default, got: $VALUE"
+            exit 1
+          fi
+          
+          echo "✅ Unset at global level works"
+          echo ""
+          
+          # Cleanup and restore
+          cd ..
+          rm -rf "$TEST_DIR"
+          
+          # Restore original user config if it existed
+          if [ -f ~/.git-pm/config.ci-backup ]; then
+            mv ~/.git-pm/config.ci-backup ~/.git-pm/config
+            echo "✓ Restored original user config"
+          else
+            rm -f ~/.git-pm/config
+            echo "✓ Cleaned up test user config"
+          fi
+          
+          echo ""
+          echo "=========================================="
+          echo "✅ All specific requirements tested!"
+          echo "=========================================="
+          echo ""
+          echo "Test results:"
+          echo "  ✓ Set at project level"
+          echo "  ✓ Get at project level"
+          echo "  ✓ Set at global level"
+          echo "  ✓ Get at global level"
+          echo "  ✓ List shows defaults, project, and user values"
+          echo "  ✓ List shows source of each value"
+          echo "  ✓ Unset at project level"
+          echo "  ✓ Unset at global level"
+
   test-python-versions:
     name: Python ${{ matrix.python-version }}
     strategy:
@@ -599,7 +860,7 @@ jobs:
             exit 1
           fi
           
-          for file in tests/test-features.py tests/simple-test.sh tests/test-git-pm.sh; do
+          for file in tests/test_features.py tests/simple-test.sh tests/test-git-pm.sh; do
             if [ -f "$file" ]; then
               echo "✅ $file exists"
             else

@@ -28,7 +28,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 class GitPM:
@@ -1238,6 +1238,189 @@ class GitPM:
         
         return 0
     
+    def cmd_config(self, key=None, value=None, is_global=False, unset=False, list_all=False):
+        """Manage git-pm configuration"""
+        
+        # Known configuration keys
+        KNOWN_KEYS = {
+            "packages_dir": "Directory where packages are installed",
+            "cache_dir": "Cache directory location",
+            "git_protocol": "Git protocol settings (dict)",
+            "url_patterns": "URL pattern mappings (dict)",
+            "azure_devops_pat": "Azure DevOps Personal Access Token"
+        }
+        
+        # Determine which config file to use
+        if is_global:
+            config_path = self.get_user_config_path()
+            config_type = "user"
+        else:
+            config_path = self.project_root / 'git-pm.config'
+            config_type = "project"
+        
+        # LIST: Show all configuration
+        if list_all:
+            print("⚙️  git-pm config")
+            print()
+            print("Configuration (merged view):")
+            print()
+            
+            # Get defaults
+            defaults = {
+                "packages_dir": ".git-packages",
+                "cache_dir": str(Path.home() / ".cache" / "git-pm"),
+                "git_protocol": {},
+                "url_patterns": {},
+                "azure_devops_pat": os.getenv("AZURE_DEVOPS_PAT", "")
+            }
+            
+            # Get user config
+            user_config = self.load_user_config()
+            
+            # Get project config
+            project_config = self.load_project_config()
+            
+            # Show all keys from defaults
+            for config_key in sorted(KNOWN_KEYS.keys()):
+                # Determine source
+                if config_key in project_config:
+                    val = project_config[config_key]
+                    source = "project"
+                elif config_key in user_config:
+                    val = user_config[config_key]
+                    source = "user"
+                else:
+                    val = defaults.get(config_key, "")
+                    source = "default"
+                
+                # Format value for display
+                if isinstance(val, dict):
+                    val_str = json.dumps(val)
+                elif isinstance(val, str) and val == "":
+                    val_str = "(empty)"
+                else:
+                    val_str = str(val)
+                
+                print(f"{config_key}={val_str} ({source})")
+            
+            print()
+            return 0
+        
+        # UNSET: Remove a configuration value
+        if unset:
+            if not key:
+                print("Error: --unset requires a key")
+                return 1
+            
+            # For unset, validate key if it exists
+            if key not in KNOWN_KEYS:
+                print()
+                print(f"Error: Unknown configuration key '{key}'")
+                print()
+                print("Valid configuration keys:")
+                for k, desc in sorted(KNOWN_KEYS.items()):
+                    print(f"  {k:<20} - {desc}")
+                print()
+                return 1
+            
+            # Load existing config
+            if config_path.exists():
+                current_config = self._load_json_file(config_path, f"{config_type} config")
+            else:
+                current_config = {}
+            
+            # Remove key if it exists (silently succeed if it doesn't)
+            if key in current_config:
+                del current_config[key]
+                
+                # Write back
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(config_path, 'w') as f:
+                    json.dump(current_config, f, indent=4)
+                
+                print(f"✓ Unset {key} in {config_type} config")
+            # Else: silently succeed
+            
+            return 0
+        
+        # Validate key exists for GET and SET operations
+        if key and key not in KNOWN_KEYS:
+            print()
+            print(f"Error: Unknown configuration key '{key}'")
+            print()
+            print("Valid configuration keys:")
+            for k, desc in sorted(KNOWN_KEYS.items()):
+                print(f"  {k:<20} - {desc}")
+            print()
+            return 1
+        
+        # GET: Retrieve a configuration value
+        if key and value is None:
+            # Load the merged config (uses existing 3-way merge)
+            merged_config = self.load_config()
+            
+            if key in merged_config:
+                val = merged_config[key]
+                
+                # Output pure value (no source info)
+                if isinstance(val, dict):
+                    print(json.dumps(val))
+                else:
+                    print(val)
+            else:
+                # Shouldn't happen since we check against KNOWN_KEYS
+                print("")
+            
+            return 0
+        
+        # SET: Set a configuration value
+        if key and value is not None:
+            # Load existing config from target file
+            if config_path.exists():
+                current_config = self._load_json_file(config_path, f"{config_type} config")
+            else:
+                current_config = {}
+            
+            # Parse value (try to infer type)
+            parsed_value = value
+            
+            # Try to parse as JSON for dicts/arrays
+            if value.startswith('{') or value.startswith('['):
+                try:
+                    parsed_value = json.loads(value)
+                except json.JSONDecodeError:
+                    # Keep as string if not valid JSON
+                    pass
+            # Boolean conversion
+            elif value.lower() in ('true', 'false'):
+                parsed_value = value.lower() == 'true'
+            # Number conversion
+            elif value.isdigit():
+                parsed_value = int(value)
+            
+            # Set the value
+            current_config[key] = parsed_value
+            
+            # Create parent directory if needed
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write back
+            with open(config_path, 'w') as f:
+                json.dump(current_config, f, indent=4)
+            
+            print(f"✓ Set {key} = {value} in {config_type} config")
+            return 0
+        
+        # If we get here, invalid usage
+        print("Usage:")
+        print("  git-pm config <key>                    # Get value")
+        print("  git-pm config <key> <value>            # Set value (project)")
+        print("  git-pm config --global <key> <value>   # Set value (user)")
+        print("  git-pm config --unset <key>            # Unset value (project)")
+        print("  git-pm config --unset --global <key>   # Unset value (user)")
+        print("  git-pm config --list                   # List all settings")
+        return 1
+    
     def cmd_add(self, name, repo, path, ref_type, ref_value):
         """Add a package to manifest"""
         print("📦 git-pm add")
@@ -1313,6 +1496,28 @@ def main():
         help="Skip confirmation prompt"
     )
     
+    # Config command
+    config_parser = subparsers.add_parser("config", help="Get or set configuration values")
+    config_parser.add_argument("key", nargs="?", help="Configuration key (e.g., packages_dir, cache_dir)")
+    config_parser.add_argument("value", nargs="?", help="Value to set")
+    config_parser.add_argument(
+        "--global",
+        dest="is_global",
+        action="store_true",
+        help="Use user-level config (~/.git-pm/config)"
+    )
+    config_parser.add_argument(
+        "--unset",
+        action="store_true",
+        help="Remove a configuration value"
+    )
+    config_parser.add_argument(
+        "--list",
+        dest="list_all",
+        action="store_true",
+        help="List all configuration values with sources"
+    )
+    
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a package to the manifest")
     add_parser.add_argument("name", help="Package name")
@@ -1342,6 +1547,14 @@ def main():
         return gpm.cmd_clean()
     elif args.command == "remove":
         return gpm.cmd_remove(args.package, auto_confirm=args.yes)
+    elif args.command == "config":
+        return gpm.cmd_config(
+            key=args.key,
+            value=args.value,
+            is_global=args.is_global,
+            unset=args.unset,
+            list_all=args.list_all
+        )
     elif args.command == "add":
         return gpm.cmd_add(args.name, args.repo, args.path, args.ref_type, args.ref_value)
     
