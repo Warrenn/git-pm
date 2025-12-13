@@ -58,6 +58,31 @@ jobs:
             exit 1
           fi
 
+  test-config-loading:
+    name: Test Config Loading (Phase 2)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Run config loading tests
+        run: |
+          echo "Testing configuration file loading..."
+          python3 test_config_loading.py
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ All config loading tests passed"
+          else
+            echo "❌ Some config loading tests failed"
+            exit 1
+          fi
+
   test-dependency-resolution:
     name: Test Dependency Resolution
     runs-on: ubuntu-22.04

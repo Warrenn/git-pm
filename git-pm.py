@@ -31,127 +31,14 @@ if sys.platform == 'win32':
 __version__ = "0.2.9"
 
 
-class SimpleYAML:
-    """Simple YAML parser for git-pm's subset of YAML"""
-    
-    @staticmethod
-    def load(file_obj):
-        """Load YAML from file object"""
-        lines = file_obj.readlines()
-        return SimpleYAML._parse_lines(lines)
-    
-    @staticmethod
-    def loads(text):
-        """Load YAML from string"""
-        lines = text.split('\n')
-        return SimpleYAML._parse_lines(lines)
-    
-    @staticmethod
-    def _parse_lines(lines):
-        """Parse YAML lines into dictionary"""
-        result = {}
-        stack = [(result, -1)]
-        
-        for line_num, line in enumerate(lines, 1):
-            line = line.rstrip()
-            if not line or line.lstrip().startswith('#'):
-                continue
-            
-            indent = len(line) - len(line.lstrip())
-            line = line.lstrip()
-            
-            if ':' in line:
-                key, _, value = line.partition(':')
-                key = key.strip()
-                value = value.strip()
-                
-                # Handle inline empty dict/list
-                if value == '{}':
-                    while len(stack) > 1 and stack[-1][1] >= indent:
-                        stack.pop()
-                    parent_dict = stack[-1][0]
-                    parent_dict[key] = {}
-                    continue
-                elif value == '[]':
-                    while len(stack) > 1 and stack[-1][1] >= indent:
-                        stack.pop()
-                    parent_dict = stack[-1][0]
-                    parent_dict[key] = []
-                    continue
-                
-                if value.startswith('"') and value.endswith('"'):
-                    value = value[1:-1]
-                elif value.startswith("'") and value.endswith("'"):
-                    value = value[1:-1]
-                
-                while len(stack) > 1 and stack[-1][1] >= indent:
-                    stack.pop()
-                
-                parent_dict = stack[-1][0]
-                
-                if not value:
-                    new_dict = {}
-                    parent_dict[key] = new_dict
-                    stack.append((new_dict, indent))
-                else:
-                    parent_dict[key] = value
-        
-        return result
-    
-    @staticmethod
-    def dump(data, file_obj):
-        """Dump data to YAML format"""
-        SimpleYAML._dump_dict(data, file_obj, 0)
-    
-    @staticmethod
-    def dumps(data):
-        """Dump data to YAML string"""
-        from io import StringIO
-        output = StringIO()
-        SimpleYAML._dump_dict(data, output, 0)
-        return output.getvalue()
-    
-    @staticmethod
-    def _dump_dict(data, file_obj, indent):
-        """Recursively dump dictionary"""
-        for key, value in sorted(data.items()):
-            if isinstance(value, dict):
-                if value:  # Non-empty dict
-                    file_obj.write("{}{}:\n".format("  " * indent, key))
-                    SimpleYAML._dump_dict(value, file_obj, indent + 1)
-                else:  # Empty dict
-                    file_obj.write("{}{}: {{}}\n".format("  " * indent, key))
-            elif isinstance(value, bool):
-                # Boolean must be checked before int (bool is subclass of int)
-                file_obj.write("{}{}: {}\n".format("  " * indent, key, str(value).lower()))
-            elif isinstance(value, (int, float)):
-                file_obj.write("{}{}: {}\n".format("  " * indent, key, value))
-            elif isinstance(value, list):
-                if value:  # Non-empty list
-                    file_obj.write("{}{}:\n".format("  " * indent, key))
-                    for item in value:
-                        file_obj.write("{}  - {}\n".format("  " * indent, item))
-                else:  # Empty list
-                    file_obj.write("{}{}: []\n".format("  " * indent, key))
-            elif value is None:
-                file_obj.write("{}{}: null\n".format("  " * indent, key))
-            else:
-                # String - quote if contains special chars
-                value_str = str(value)
-                if any(c in value_str for c in [':', '#', '[', ']', '{', '}', ',', '&', '*', '!', '|', '>', "'", '"', '%', '@', '`']):
-                    # Quote the value
-                    value_str = '"{}"'.format(value_str.replace('"', '\\"'))
-                file_obj.write("{}{}: {}\n".format("  " * indent, key, value_str))
-
-
 class GitPM:
     def __init__(self):
-        # Find project root by looking for git-pm.yaml
+        # Find project root by looking for git-pm.json
         self.project_root = self._find_project_root()
         
         self.config = self.load_config()
-        self.manifest_file = self.project_root / "git-pm.yaml"
-        self.local_override_file = self.project_root / "git-pm.local.yaml"
+        self.manifest_file = self.project_root / "git-pm.json"
+        self.local_override_file = self.project_root / "git-pm.local"
         self.lockfile = self.project_root / "git-pm.lock"
         self.packages_dir = self.project_root / self.config["packages_dir"]
         
@@ -160,20 +47,34 @@ class GitPM:
         self.branch_commits = {}  # Resolved branch -> commit mappings
     
     def _find_project_root(self):
-        """Find project root by looking for git-pm.yaml"""
+        """Find project root by looking for git-pm.json"""
         current = Path.cwd()
         
         # Check current directory first
-        if (current / "git-pm.yaml").exists():
+        if (current / "git-pm.json").exists():
             return current
         
         # Check parent directories
         for parent in current.parents:
-            if (parent / "git-pm.yaml").exists():
+            if (parent / "git-pm.json").exists():
                 return parent
         
         # No manifest found, use current directory
         return current
+    
+    def _load_json_file(self, file_path, description="config file"):
+        """Load and parse a JSON file with helpful error messages"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            print("Error: Invalid JSON in {} (line {}, column {})".format(
+                file_path.name, e.lineno, e.colno))
+            print("  {}".format(str(e.msg)))
+            raise
+        except Exception as e:
+            print("Error: Failed to load {}: {}".format(description, e))
+            raise
     
     def load_config(self):
         """Load configuration with defaults"""
@@ -186,13 +87,72 @@ class GitPM:
         }
         
         # Load user config
-        config_file = self.project_root / "git-pm.config.yaml" if hasattr(self, 'project_root') else Path.cwd() / "git-pm.config.yaml"
+        config_file = self.project_root / "git-pm.config" if hasattr(self, 'project_root') else Path.cwd() / "git-pm.config"
         if config_file.exists():
-            with open(config_file, 'r') as f:
-                user_config = SimpleYAML.load(f)
-                config.update(user_config)
+            user_config = self._load_json_file(config_file, "project config")
+            config.update(user_config)
         
         return config
+    
+    def get_user_config_path(self):
+        """Get user-level configuration file path (cross-platform)"""
+        return Path.home() / '.git-pm' / 'config'
+    
+    def load_user_config(self):
+        """Load user-level configuration from ~/.git-pm/config"""
+        config_path = self.get_user_config_path()
+        
+        if not config_path.exists():
+            return {}
+        
+        try:
+            return self._load_json_file(config_path, "user config")
+        except Exception:
+            return {}
+    
+    def load_project_config(self):
+        """Load project-level configuration from git-pm.config"""
+        config_path = self.project_root / 'git-pm.config'
+        
+        if not config_path.exists():
+            return {}
+        
+        try:
+            return self._load_json_file(config_path, "project config")
+        except Exception:
+            return {}
+    
+    def merge_configs(self, user_config, project_config):
+        """
+        Merge user and project configurations.
+        Project config takes precedence over user config.
+        
+        Args:
+            user_config: User-level configuration dict
+            project_config: Project-level configuration dict
+        
+        Returns:
+            Merged configuration dict
+        """
+        merged = {}
+        
+        # Start with user config
+        for key, value in user_config.items():
+            if isinstance(value, dict):
+                merged[key] = dict(value)
+            else:
+                merged[key] = value
+        
+        # Override with project config
+        for key, value in project_config.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                # Deep merge for nested dicts
+                merged[key] = {**merged[key], **value}
+            else:
+                # Override completely
+                merged[key] = value
+        
+        return merged
     
     def check_git(self):
         """Check if git is installed"""
@@ -214,33 +174,55 @@ class GitPM:
         print("📄 Loading manifest...")
         
         if not self.manifest_file.exists():
-            print("Error: git-pm.yaml not found in {}".format(self.project_root))
+            print("Error: git-pm.json not found in {}".format(self.project_root))
             return {}
         
-        with open(self.manifest_file, 'r') as f:
-            data = SimpleYAML.load(f)
-            return data.get("packages", {})
+        data = self._load_json_file(self.manifest_file, "manifest")
+        return data.get("packages", {})
     
     def load_local_overrides(self):
-        """Load local development overrides"""
+        """Load local development overrides (same schema as manifest)"""
         if not self.local_override_file.exists():
             return {}
         
         print("Applying local overrides from {}".format(self.local_override_file.name))
-        with open(self.local_override_file, 'r') as f:
-            data = SimpleYAML.load(f)
-            return data.get("overrides", {})
+        data = self._load_json_file(self.local_override_file, "local overrides")
+        return data.get("packages", {})
     
     def get_cache_key(self, repo, path, ref_type, ref_value):
         """Generate cache key for package"""
         cache_str = "{}:{}:{}:{}".format(repo, path, ref_type, ref_value)
         return hashlib.sha256(cache_str.encode()).hexdigest()[:16]
     
+    def is_local_package(self, repo_url):
+        """Check if a repository URL is a local file path"""
+        return repo_url.startswith("file://")
+    
     def normalize_repo_url(self, repo):
         """Convert repository identifier to full URL"""
         repo = repo.strip()
         
-        if repo.startswith(("http://", "https://", "git@", "file://")):
+        # Already a file:// URL
+        if repo.startswith("file://"):
+            path = repo[7:]  # Remove "file://"
+            if not os.path.isabs(path):
+                # Make relative paths absolute relative to project root
+                path = str((self.project_root / path).resolve())
+            return "file://{}".format(path)
+        
+        # Check if it looks like a local path (starts with ./ ../ / ~)
+        if repo.startswith(("./", "../", "/", "~/")):
+            if repo.startswith("~/"):
+                path = os.path.expanduser(repo)
+            elif os.path.isabs(repo):
+                path = repo
+            else:
+                # Relative path - resolve relative to project root
+                path = str((self.project_root / repo).resolve())
+            return "file://{}".format(path)
+        
+        # Already a full URL (http/https/git@)
+        if repo.startswith(("http://", "https://", "git@")):
             return repo
         
         if "/" not in repo:
@@ -471,13 +453,13 @@ class GitPM:
             print("    ✗ Operation failed: {}".format(e))
             return False
     
-    def discover_dependencies(self, packages, depth=0, parent_chain=None, overrides=None):
+    def discover_dependencies(self, packages, depth=0, parent_chain=None, local_overrides=None):
         """Recursively discover all dependencies"""
         if parent_chain is None:
             parent_chain = []
         
-        if overrides is None:
-            overrides = {}
+        if local_overrides is None:
+            local_overrides = {}
         
         # Type check
         if not isinstance(packages, dict):
@@ -501,79 +483,84 @@ class GitPM:
                 " (depth {})".format(depth) if depth > 0 else ""
             ))
             
-            # Check for local override first
-            if name in overrides:
-                override = overrides[name]
-                if override.get("type") == "local":
-                    local_path = Path(override["path"])
-                    if not local_path.is_absolute():
-                        local_path = (self.project_root / local_path).resolve()
-                    
-                    if not local_path.exists():
-                        print("{}  ✗ Local override path does not exist: {}".format("  " * depth, local_path))
-                        continue
-                    
-                    print("{}  Using local override: {}".format("  " * depth, local_path))
-                    
-                    # Look for git-pm.yaml in local path
-                    pkg_manifest_path = local_path / "git-pm.yaml"
-                    
-                    nested_deps = {}
-                    if pkg_manifest_path.exists():
-                        with open(pkg_manifest_path, 'r') as f:
-                            pkg_data = SimpleYAML.load(f)
-                            nested_deps = pkg_data.get("packages", {})
-                        
-                        # Defensive: ensure nested_deps is a dict
-                        if not isinstance(nested_deps, dict):
-                            print("{}  ⚠️  Warning: packages field is not a dictionary, treating as empty".format("  " * depth))
-                            nested_deps = {}
-                        
-                        if nested_deps:
-                            print("{}  Found {} dependencies".format("  " * depth, len(nested_deps)))
-                            # Recursively discover
-                            discovered_nested = self.discover_dependencies(
-                                nested_deps,
-                                depth + 1,
-                                parent_chain + [name],
-                                overrides  # Pass overrides down
-                            )
-                            all_discovered.update(discovered_nested)
-                    
-                    # Store discovered package with local override info
-                    self.discovered[name] = {
-                        "config": config,
-                        "dependencies": nested_deps,
-                        "depth": depth,
-                        "local_override": True,
-                        "local_path": str(local_path)
-                    }
-                    all_discovered[name] = self.discovered[name]
-                    continue
+            # Check if this package has a local override
+            if name in local_overrides:
+                config = local_overrides[name]  # Complete replacement
+                print("{}  Using local override".format("  " * depth))
             
-            # No local override, proceed with remote clone
-            # Resolve branch to commit if needed
+            # Get repository URL
+            repo = config.get("repo")
+            if not repo:
+                print("{}  ✗ No repository specified".format("  " * depth))
+                continue
+            
+            repo_url = self.normalize_repo_url(repo)
+            
+            # Check if this is a local package
+            if self.is_local_package(repo_url):
+                # Handle local package
+                local_path = Path(repo_url[7:])  # Remove file://
+                
+                if not local_path.exists():
+                    print("{}  ✗ Local path does not exist: {}".format("  " * depth, local_path))
+                    continue
+                
+                print("{}  Local package: {}".format("  " * depth, local_path))
+                
+                # Look for git-pm.json in local path
+                path_in_repo = config.get("path", "")
+                pkg_manifest_path = local_path / path_in_repo / "git-pm.json" if path_in_repo else local_path / "git-pm.json"
+                
+                nested_deps = {}
+                if pkg_manifest_path.exists():
+                    pkg_data = self._load_json_file(pkg_manifest_path, "package manifest")
+                    nested_deps = pkg_data.get("packages", {})
+                    
+                    # Defensive: ensure nested_deps is a dict
+                    if not isinstance(nested_deps, dict):
+                        print("{}  ⚠️  Warning: packages field is not a dictionary, treating as empty".format("  " * depth))
+                        nested_deps = {}
+                    
+                    if nested_deps:
+                        print("{}  Found {} dependencies".format("  " * depth, len(nested_deps)))
+                        # Recursively discover
+                        discovered_nested = self.discover_dependencies(
+                            nested_deps,
+                            depth + 1,
+                            parent_chain + [name],
+                            local_overrides  # Pass overrides down
+                        )
+                        all_discovered.update(discovered_nested)
+                
+                # Store discovered package
+                self.discovered[name] = {
+                    "config": config,
+                    "dependencies": nested_deps,
+                    "depth": depth,
+                    "local": True,
+                    "local_path": str(local_path),
+                    "path_in_repo": path_in_repo
+                }
+                all_discovered[name] = self.discovered[name]
+                continue
+            
+            # Remote package handling
+            path = config.get("path", "")
             ref = config.get("ref", {})
             ref_type = ref.get("type", "branch")
             ref_value = ref.get("value", "main")
             
+            # Resolve branch to commit if needed
             if ref_type == "branch":
-                repo_url = self.normalize_repo_url(config["repo"])
                 commit_sha = self.resolve_branch_to_commit(repo_url, ref_value)
                 if commit_sha:
                     # Update config to use resolved commit
                     config = dict(config)
                     config["ref"] = {"type": "commit", "value": commit_sha}
                     config["original_ref"] = {"type": "branch", "value": ref_value}
+                    ref_type = "commit"
+                    ref_value = commit_sha
             
-            # Install to temp location to discover dependencies
-            repo = config.get("repo")
-            path = config.get("path", "")
-            ref = config.get("ref", {})
-            ref_type = ref.get("type", "commit")
-            ref_value = ref.get("value", "main")
-            
-            repo_url = self.normalize_repo_url(repo)
             cache_key = self.get_cache_key(repo, path, ref_type, ref_value)
             cache_path = self.get_cache_path(cache_key)
             
@@ -589,14 +576,13 @@ class GitPM:
             else:
                 print("  Found in cache: {}".format(cache_key))
             
-            # Look for git-pm.yaml in the package
-            pkg_manifest_path = cache_path / path / "git-pm.yaml" if path else cache_path / "git-pm.yaml"
+            # Look for git-pm.json in the package
+            pkg_manifest_path = cache_path / path / "git-pm.json" if path else cache_path / "git-pm.json"
             
             nested_deps = {}
             if pkg_manifest_path.exists():
-                with open(pkg_manifest_path, 'r') as f:
-                    pkg_data = SimpleYAML.load(f)
-                    nested_deps = pkg_data.get("packages", {})
+                pkg_data = self._load_json_file(pkg_manifest_path, "package manifest")
+                nested_deps = pkg_data.get("packages", {})
                 
                 # Defensive: ensure nested_deps is a dict
                 if not isinstance(nested_deps, dict):
@@ -610,7 +596,7 @@ class GitPM:
                         nested_deps,
                         depth + 1,
                         parent_chain + [name],
-                        overrides  # Pass overrides down
+                        local_overrides  # Pass overrides down
                     )
                     all_discovered.update(discovered_nested)
             
@@ -656,47 +642,49 @@ class GitPM:
         
         return order
     
-    def install_package(self, name, pkg_info, overrides):
+    def install_package(self, name, pkg_info):
         """Install a single package"""
         print("📦 Installing {}...".format(name))
         
         config = pkg_info["config"]
-        cache_path = pkg_info.get("cache_path")  # Make optional for local overrides
-        path = config.get("path", "")
+        is_local = pkg_info.get("local", False)
         
-        # Check for local override
-        if name in overrides:
-            override = overrides[name]
-            if override.get("type") == "local":
-                local_path = Path(override["path"])
-                if not local_path.is_absolute():
-                    local_path = (self.project_root / local_path).resolve()
-                
-                if not local_path.exists():
-                    print("  ✗ Local path does not exist: {}".format(local_path))
-                    return None
-                
-                dest_path = self.packages_dir / name
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                # Use symlink for local overrides
-                if self.copy_or_link_package(local_path.parent, local_path.name, dest_path, use_symlink=True):
-                    print("  Override: {} -> local (symlinked)".format(name))
-                    return {
-                        "type": "local",
-                        "path": str(local_path),
-                        "symlinked": True,
-                        "installed_at": datetime.now().isoformat()
-                    }
+        dest_path = self.packages_dir / name
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Handle local package
+        if is_local:
+            local_path = Path(pkg_info["local_path"])
+            path_in_repo = pkg_info.get("path_in_repo", "")
+            
+            if not local_path.exists():
+                print("  ✗ Local path does not exist: {}".format(local_path))
                 return None
+            
+            # Determine source path
+            src_path = local_path / path_in_repo if path_in_repo else local_path
+            
+            # Use symlink for local packages
+            if self.copy_or_link_package(src_path.parent if path_in_repo else local_path, 
+                                         src_path.name if path_in_repo else "",
+                                         dest_path, use_symlink=True):
+                print("  Local: {} (symlinked)".format(name))
+                return {
+                    "type": "local",
+                    "repo": config.get("repo"),
+                    "path": str(local_path),
+                    "symlinked": True,
+                    "installed_at": datetime.now().isoformat()
+                }
+            return None
         
-        # Install from cache (only if not local override)
+        # Handle remote package
+        cache_path = pkg_info.get("cache_path")
         if not cache_path:
             print("  ✗ No cache path available for package")
             return None
         
-        dest_path = self.packages_dir / name
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        path = config.get("path", "")
         
         if not self.copy_or_link_package(cache_path, path, dest_path, use_symlink=False):
             return None
@@ -727,10 +715,9 @@ class GitPM:
         
         # Entries that should be in .gitignore
         required_entries = [
-            "# git-pm - Package manager files",
             ".git-packages/",
             ".git-pm.env",
-            "git-pm.local.yaml",
+            "git-pm.local",
             "git-pm.lock"
         ]
         
@@ -743,10 +730,6 @@ class GitPM:
         # Check which entries are missing
         missing_entries = []
         for entry in required_entries:
-            # Skip the comment if any git-pm entry already exists
-            if entry.startswith("#"):
-                continue
-            
             # Check if entry exists (exact match or with trailing slash variants)
             entry_variants = [entry, entry.rstrip('/')]
             if not any(line.rstrip('/') in entry_variants for line in existing_lines):
@@ -765,17 +748,13 @@ class GitPM:
                 if existing_lines and existing_lines[-1]:
                     f.write('\n')
                 
-                # Add comment header if this is the first git-pm entry
-                if not any('git-pm' in line.lower() for line in existing_lines):
-                    f.write('\n# git-pm - Package manager files\n')
-                
                 # Add missing entries
                 for entry in missing_entries:
                     f.write(entry + '\n')
                     print("  ✓ Added: {}".format(entry))
         else:
-            # Check if .gitignore exists and has git-pm entries
-            if gitignore_path.exists() and any('git-pm' in line.lower() for line in existing_lines):
+            # Check if .gitignore exists
+            if gitignore_path.exists():
                 print("✓ .gitignore up to date")
     
     def cmd_install(self, resolve_deps=True, manage_gitignore=True):
@@ -791,17 +770,29 @@ class GitPM:
         
         print("📋 Loading configuration...")
         
-        root_packages = self.load_manifest()
-        if not root_packages:
+        # Load manifest packages
+        manifest_packages = self.load_manifest()
+        if not manifest_packages:
             print("Error: No packages defined in manifest")
             return 1
         
-        overrides = self.load_local_overrides()
+        # Load local override packages
+        local_packages = self.load_local_overrides()
+        
+        # Merge packages: local completely overrides manifest
+        root_packages = {**manifest_packages, **local_packages}
+        
+        print("   Loaded {} package(s) ({} from manifest, {} local overrides)".format(
+            len(root_packages),
+            len(manifest_packages),
+            len(local_packages)
+        ))
         
         if resolve_deps:
             # Full dependency resolution
             print("🔍 Discovering dependencies...")
-            self.discover_dependencies(root_packages, overrides=overrides)
+            # Pass local_packages as overrides for nested dependency resolution
+            self.discover_dependencies(root_packages, local_overrides=local_packages)
             print("   Found {} total packages".format(len(self.discovered)))
             
             print("📦 Planning installation order...")
@@ -817,26 +808,40 @@ class GitPM:
             # Prepare discovered info for flat install
             for name, config in root_packages.items():
                 repo = config.get("repo")
-                path = config.get("path", "")
-                ref = config.get("ref", {})
-                ref_type = ref.get("type", "branch")
-                ref_value = ref.get("value", "main")
-                
                 repo_url = self.normalize_repo_url(repo)
-                cache_key = self.get_cache_key(repo, path, ref_type, ref_value)
-                cache_path = self.get_cache_path(cache_key)
                 
-                # Clone if needed
-                if not cache_path.exists():
-                    self.sparse_checkout_package(repo_url, ref_type, ref_value, path, cache_path)
-                
-                self.discovered[name] = {
-                    "config": config,
-                    "dependencies": {},
-                    "depth": 0,
-                    "cache_key": cache_key,
-                    "cache_path": cache_path
-                }
+                # Check if local package
+                if self.is_local_package(repo_url):
+                    local_path = Path(repo_url[7:])
+                    self.discovered[name] = {
+                        "config": config,
+                        "dependencies": {},
+                        "depth": 0,
+                        "local": True,
+                        "local_path": str(local_path),
+                        "path_in_repo": config.get("path", "")
+                    }
+                else:
+                    # Remote package
+                    path = config.get("path", "")
+                    ref = config.get("ref", {})
+                    ref_type = ref.get("type", "branch")
+                    ref_value = ref.get("value", "main")
+                    
+                    cache_key = self.get_cache_key(repo, path, ref_type, ref_value)
+                    cache_path = self.get_cache_path(cache_key)
+                    
+                    # Clone if needed
+                    if not cache_path.exists():
+                        self.sparse_checkout_package(repo_url, ref_type, ref_value, path, cache_path)
+                    
+                    self.discovered[name] = {
+                        "config": config,
+                        "dependencies": {},
+                        "depth": 0,
+                        "cache_key": cache_key,
+                        "cache_path": cache_path
+                    }
         
         self.packages_dir.mkdir(parents=True, exist_ok=True)
         
@@ -849,7 +854,7 @@ class GitPM:
                 print("  ✗ Package info not found: {}".format(name))
                 continue
             
-            result = self.install_package(name, pkg_info, overrides)
+            result = self.install_package(name, pkg_info)
             if result:
                 lockfile_data["packages"][name] = result
                 success_count += 1
@@ -857,7 +862,7 @@ class GitPM:
         if success_count > 0:
             print("💾 Saving lockfile...")
             with open(self.lockfile, 'w') as f:
-                json.dump(lockfile_data, f, indent=2)
+                json.dump(lockfile_data, f, indent=4)
             
             # Create dependency symlinks inside packages
             print("🔗 Creating dependency symlinks...")
@@ -1030,27 +1035,42 @@ class GitPM:
             return 1
         
         print("📋 Loading configuration...")
-        packages = self.load_manifest()
         
-        if not packages:
+        # Load manifest and local packages
+        manifest_packages = self.load_manifest()
+        if not manifest_packages:
             print("Error: No packages in manifest")
             return 1
+        
+        local_packages = self.load_local_overrides()
+        
+        # Merge packages
+        all_packages = {**manifest_packages, **local_packages}
         
         print("🔄 Updating packages...")
         
         updated = 0
-        for name, config in packages.items():
+        skipped = 0
+        
+        for name, config in all_packages.items():
+            repo = config.get("repo")
+            repo_url = self.normalize_repo_url(repo)
+            
+            # Skip local packages - can't update local files
+            if self.is_local_package(repo_url):
+                print("📦 Skipping {} (local package)".format(name))
+                skipped += 1
+                continue
+            
             ref = config.get("ref", {})
             ref_type = ref.get("type", "branch")
             
+            # Only update branch references
             if ref_type == "branch":
                 print("📦 Updating {}...".format(name))
                 
-                repo = config.get("repo")
                 path = config.get("path", "")
                 ref_value = ref.get("value", "main")
-                
-                repo_url = self.normalize_repo_url(repo)
                 
                 # Resolve branch to latest commit
                 commit_sha = self.resolve_branch_to_commit(repo_url, ref_value)
@@ -1079,12 +1099,14 @@ class GitPM:
                     "cache_path": cache_path
                 }
                 
-                overrides = self.load_local_overrides()
-                result = self.install_package(name, self.discovered[name], overrides)
+                result = self.install_package(name, self.discovered[name])
                 if result:
                     updated += 1
+            else:
+                print("📦 Skipping {} (not a branch reference)".format(name))
+                skipped += 1
         
-        print("✅ Updated {} package(s)".format(updated))
+        print("✅ Updated {} package(s), skipped {}".format(updated, skipped))
         return 0
     
     def _rmtree_windows_safe(self, path):
@@ -1129,8 +1151,7 @@ class GitPM:
             print("No packages installed (no lockfile found)")
             return 0
         
-        with open(self.lockfile, 'r') as f:
-            lockfile = json.load(f)
+        lockfile = self._load_json_file(self.lockfile, "lockfile")
         
         packages = lockfile.get("packages", {})
         if not packages:
@@ -1176,11 +1197,10 @@ class GitPM:
         else:
             manifest_dir = cwd
         
-        manifest_file = manifest_dir / "git-pm.yaml"
+        manifest_file = manifest_dir / "git-pm.json"
         
         if manifest_file.exists():
-            with open(manifest_file, 'r') as f:
-                manifest = SimpleYAML.load(f)
+            manifest = self._load_json_file(manifest_file, "manifest")
         else:
             print("Creating new manifest...")
             manifest = {"packages": {}}
@@ -1199,7 +1219,7 @@ class GitPM:
         
         print("Saving manifest to {}...".format(manifest_file.name))
         with open(manifest_file, 'w') as f:
-            SimpleYAML.dump(manifest, f)
+            json.dump(manifest, f, indent=4)
         
         print("✓ Package '{}' added to manifest".format(name))
         print("\nPackage configuration:")
