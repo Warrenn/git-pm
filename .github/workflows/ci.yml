@@ -493,6 +493,10 @@ jobs:
           echo "============================================"
           echo ""
           
+          # Ensure git-pm.py is accessible to the test
+          # (In CI, we're at repo root, test is in tests/)
+          ls -la git-pm.py tests/test-config-command.sh
+          
           # Run the comprehensive test suite
           chmod +x tests/test-config-command.sh
           bash tests/test-config-command.sh
