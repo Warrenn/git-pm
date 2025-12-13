@@ -11,10 +11,6 @@ git-pm.local
 # Uncomment if you want each developer to have their own config
 # git-pm.config
 
-# user specific manual version management
-# Some teams commit this for reproducibility, others don't
-git-pm.lock
-
 # Cache directory (if using local project cache)
 .git-pm-cache/
 
