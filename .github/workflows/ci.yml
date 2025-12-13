@@ -23,8 +23,8 @@ jobs:
       
       - name: Run feature tests
         run: |
-          echo "Testing features from ./tests/test_features.py..."
-          python3 tests/test_features.py
+          echo "Testing features from ./tests/test-features.py..."
+          python3 tests/test-features.py
           
           if [ $? -eq 0 ]; then
             echo "✅ All feature tests passed"
@@ -599,7 +599,7 @@ jobs:
             exit 1
           fi
           
-          for file in tests/test_features.py tests/simple-test.sh tests/test-git-pm.sh; do
+          for file in tests/test-features.py tests/simple-test.sh tests/test-git-pm.sh; do
             if [ -f "$file" ]; then
               echo "✅ $file exists"
             else
