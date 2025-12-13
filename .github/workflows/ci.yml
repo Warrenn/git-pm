@@ -186,7 +186,7 @@ jobs:
           git config user.email "test@test.com"
           git config user.name "Test User"
           
-          python3 git-pm.py install --no-resolve-deps
+          python3 git-pm.py install
           
           if [ -f ".git-packages/pkg/test.txt" ]; then
             echo "✅ Local override works"
