@@ -107,10 +107,21 @@ jobs:
           fi
           echo "✅ No removed commands"
           
+          # Check that remove command exists (v0.3.0+)
+          if ! grep -q "def cmd_remove" git-pm.py; then
+            echo "❌ Remove command not found (required for v0.3.0+)"
+            exit 1
+          fi
+          echo "✅ Remove command present"
+          
           # Test basic commands
           python3 git-pm.py --version || exit 1
-          python3 git-pm.py --help | grep -q "install.*clean.*add" || exit 1
-          echo "✅ Commands work"
+          python3 git-pm.py --help | grep -q "install.*clean.*remove.*add" || exit 1
+          echo "✅ Commands work (install, clean, remove, add)"
+          
+          # Test remove command specifically
+          python3 git-pm.py remove --help | grep -q "package" || exit 1
+          echo "✅ Remove command functional"
           
           echo "✅ Pre-release validation passed"
       
@@ -156,63 +167,138 @@ jobs:
           - **Lines Added:** ${{ steps.stats.outputs.insertions }}
           - **Lines Removed:** ${{ steps.stats.outputs.deletions }}
           
-          ## ✨ What's New in v0.2.9
+          ## ✨ What's New in v0.3.0
           
-          ### 🧹 Major Refactoring - Simplified & Streamlined
+          ### 🗑️ New Feature: Remove Command
           
-          This release removes the lockfile system and significantly simplifies git-pm while maintaining all core functionality.
+          This release adds the highly-requested **`remove` command** with intelligent dependency management and deep recursion analysis!
           
-          **Code Reduction:**
-          - 23.8% smaller codebase (removed 362 lines)
-          - 50% fewer commands (6 → 3)
-          - 67% fewer flags (3 → 1)
+          **New Command:**
+          ```bash
+          git-pm remove <package-name> [-y]
+          ```
           
-          **Removed Features:**
-          - ❌ Lockfile system (\`git-pm.lock\`) - Use commit refs for reproducibility
-          - ❌ \`git-pm update\` command - Use \`git-pm install\` instead
-          - ❌ \`--force-fresh\` flag - All installs are fresh now
-          - ❌ \`--no-resolve-deps\` flag - Dependencies always resolved
+          ### 🎯 Key Features
           
-          **What Remains (Fully Functional):**
-          - ✅ Full dependency resolution (always enabled)
-          - ✅ Tag/commit/branch references
-          - ✅ Local overrides (\`git-pm.local\`)
-          - ✅ Config management (3-way merging)
-          - ✅ Symlink creation
-          - ✅ .gitignore management (no lockfile entry)
-          - ✅ Environment file generation
-          - ✅ Windows compatibility
-          - ✅ Python 3.8-3.12 support
+          - ✅ **Smart dependency cascade** - Automatically removes unused dependencies
+          - ✅ **Deep recursion analysis** - Analyzes dependencies at any depth (3+ levels)
+          - ✅ **Preserves shared dependencies** - Never breaks other packages
+          - ✅ **Multi-path detection** - Correctly handles packages referenced multiple ways
+          - ✅ **Dual manifest support** - Removes from both git-pm.json and git-pm.local
+          - ✅ **Environment file cleanup** - Updates .git-pm.env automatically
+          - ✅ **Preview before removal** - Shows what will be removed (unless -y flag)
+          - ✅ **Safe by design** - No --force flag, never breaks dependencies
+          
+          ### 📖 How It Works
+          
+          **Example Dependency Tree:**
+          ```
+          project
+          ├── pkg-a ─────────┐
+          │   ├── pkg-b ───┐ │
+          │   │   └── pkg-d │  ← Shared dependency!
+          │   └── pkg-c ───┤ │
+          │       └── pkg-d │
+          └── pkg-x ─────────┘
+              └── pkg-d
+          ```
+          
+          **Remove pkg-a:**
+          ```bash
+          $ git-pm remove pkg-a
+          
+          📦 Removal plan:
+            ✓ Remove pkg-a (explicitly requested)
+            ✓ Remove pkg-b (only needed by pkg-a)
+            ✓ Remove pkg-c (only needed by pkg-a)
+            ✓ Keep pkg-d (still needed by pkg-x)
+            ✓ Keep pkg-x (still in manifest)
+          
+          Proceed? (y/N): y
+          
+          ✅ Successfully removed 'pkg-a'
+             Removed 3 packages from disk
+          ```
+          
+          **Result:** pkg-a, pkg-b, and pkg-c removed. pkg-d and pkg-x preserved (still needed).
+          
+          ### 🛡️ Safety Features
+          
+          - ✅ Never breaks dependencies
+          - ✅ Shows preview before removing
+          - ✅ Requires confirmation (unless -y)
+          - ✅ Preserves packages in use
+          - ✅ Handles circular dependencies
+          - ✅ Works with nested symlinks
+          - ✅ No --force flag (intentional)
+          
+          ### 🔧 What Remove Does
+          
+          1. **Analyzes dependencies** - Recursively discovers what will remain
+          2. **Removes from manifests** - Updates git-pm.json and git-pm.local
+          3. **Removes from disk** - Only packages no longer needed
+          4. **Updates environment** - Cleans .git-pm.env entries
+          5. **Preserves cache** - Never touches ~/.cache/git-pm/
+          
+          ### 📋 Remove Command Options
+          
+          | Option | Description |
+          |--------|-------------|
+          | `-y, --yes` | Skip confirmation prompt |
+          | `-h, --help` | Show help message |
+          
+          ### 📚 Example Scenarios
+          
+          **Remove unused package:**
+          ```bash
+          git-pm remove old-package -y
+          ```
+          
+          **Remove package with dependencies:**
+          ```bash
+          git-pm remove parent-package
+          # Automatically removes child packages if not needed elsewhere
+          ```
+          
+          **Remove from both manifests:**
+          ```bash
+          git-pm remove override-package -y
+          # Removes from git-pm.json AND git-pm.local
+          ```
           
           ## 🚀 Quick Start
           
-          ### Available Commands
+          ### Available Commands (Updated for v0.3.0)
           
-          \`\`\`bash
+          ```bash
           git-pm install [--no-gitignore]    # Install packages with dependency resolution
           git-pm clean                        # Remove all installed packages
-          git-pm add <name> <repo> [opts]  # Add package to manifest
-          \`\`\`
+          git-pm remove <pkg> [-y]            # Remove specific package (NEW!)
+          git-pm add <n> <repo> [opts]  # Add package to manifest
+          ```
           
           ### Example Usage
           
-          \`\`\`bash
+          ```bash
           # Add a package (JSON format)
-          git-pm add utils github.com/company/monorepo \\
-            --path packages/utils \\
-            --ref-type tag \\
+          git-pm add utils github.com/company/monorepo \
+            --path packages/utils \
+            --ref-type tag \
             --ref-value v1.0.0
           
           # Install with automatic dependency resolution
           git-pm install
           
-          # Clean packages
+          # Remove a specific package
+          git-pm remove utils -y
+          
+          # Clean all packages
           git-pm clean
-          \`\`\`
+          ```
           
           ## 📋 Manifest Format (JSON)
           
-          \`\`\`json
+          ```json
           {
             "packages": {
               "azure-bootstrap": {
@@ -233,35 +319,14 @@ jobs:
               }
             }
           }
-          \`\`\`
+          ```
           
-          ## 🔄 Migration Guide
-          
-          **For Most Users:** No changes needed! Existing manifests work as-is.
-          
-          **Command Changes:**
-          \`\`\`bash
-          # Old → New
-          git-pm update              → git-pm install
-          git-pm install --force-fresh → git-pm install
-          \`\`\`
-          
-          **For Reproducibility:**
-          Use commit refs instead of branches:
-          \`\`\`json
-          {
-            "ref": {
-              "type": "commit",
-              "value": "abc123def456"
-            }
-          }
-          \`\`\`
-          
-          ## 📚 Core Features
+          ## 📚 Core Features (Complete Set)
           
           ✅ **Dependency Resolution** - Automatic recursive discovery  
           ✅ **Explicit Versioning** - Tags, branches, or commits  
-          ✅ **Local Overrides** - Fast development with \`git-pm.local\`  
+          ✅ **Package Removal** - Smart cascade with preservation (NEW!)  
+          ✅ **Local Overrides** - Fast development with `git-pm.local`  
           ✅ **Smart Caching** - Fast repeated installs  
           ✅ **Cross-Platform** - Linux, macOS, Windows  
           ✅ **Zero Dependencies** - Pure Python 3.8+  
@@ -276,7 +341,7 @@ jobs:
           ## 🎓 Examples
           
           ### Terraform Modules
-          \`\`\`json
+          ```json
           {
             "packages": {
               "azure-bootstrap": {
@@ -286,10 +351,10 @@ jobs:
               }
             }
           }
-          \`\`\`
+          ```
           
           ### Shared Libraries
-          \`\`\`json
+          ```json
           {
             "packages": {
               "common-utils": {
@@ -299,10 +364,10 @@ jobs:
               }
             }
           }
-          \`\`\`
+          ```
           
           ### Bitbucket Support
-          \`\`\`json
+          ```json
           {
             "packages": {
               "my-lib": {
@@ -312,8 +377,18 @@ jobs:
               }
             }
           }
-          \`\`\`
+          ```
           
+          ## 🔄 Previous Release (v0.2.9)
+          
+          v0.2.9 removed the lockfile system and simplified git-pm:
+          - Removed lockfile system (git-pm.lock)
+          - Removed `git-pm update` command
+          - Removed `--force-fresh` and `--no-resolve-deps` flags
+          - 23.8% smaller codebase
+          - Use commit refs for reproducibility instead of lockfile
+          
+          ## 🙏 Feedback
           ## 🙏 Feedback
           
           Please report issues at: [${{ env.REPO_FULL }}/issues](${{ env.REPO_URL }}/issues)
