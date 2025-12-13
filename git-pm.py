@@ -19,6 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Fix Windows encoding issues with Unicode characters (emojis)
 if sys.platform == 'win32':
     # Set UTF-8 encoding for stdout and stderr
     import io
@@ -797,7 +798,7 @@ class GitPM:
         print(f"   Found {len(self.discovered)} total packages")
         print("📦 Planning installation order...")
         install_order = self.topological_sort()
-        print(f"   Order: {" -> ".join(install_order)}")
+        print(f"   Order: {' -> '.join(install_order)}")
         print(f"📥 Installing {len(install_order)} package(s)...")
         # Run common install sequence
         success_count = self._run_install_sequence(install_order)
