@@ -39,7 +39,6 @@ class GitPM:
         self.config = self.load_config()
         self.manifest_file = self.project_root / "git-pm.json"
         self.local_override_file = self.project_root / "git-pm.local"
-        self.lockfile = self.project_root / "git-pm.lock"
         self.packages_dir = self.project_root / self.config["packages_dir"]
         
         # Dependency resolution state
@@ -749,14 +748,13 @@ class GitPM:
     
     def _run_install_sequence(self, install_order):
         """
-        Run the common install sequence: install packages, save lockfile, create symlinks, generate env.
+        Run the common install sequence: install packages, create symlinks, generate env.
         
         Returns:
             int: Number of successfully installed packages
         """
         self.packages_dir.mkdir(parents=True, exist_ok=True)
         
-        lockfile_data = {"packages": {}, "installation_order": install_order}
         success_count = 0
         
         for name in install_order:
@@ -767,12 +765,9 @@ class GitPM:
             
             result = self.install_package(name, pkg_info)
             if result:
-                lockfile_data["packages"][name] = result
                 success_count += 1
         
         if success_count > 0:
-            print("💾 Saving lockfile...")
-            self.save_lockfile(lockfile_data)
             
             print("🔗 Creating dependency symlinks...")
             self.create_dependency_symlinks()
@@ -782,130 +777,8 @@ class GitPM:
         
         return success_count
     
-    def load_lockfile(self):
-        """Load and parse lockfile"""
-        if not self.lockfile.exists():
-            return None
-        
-        try:
-            return self._load_json_file(self.lockfile, "lockfile")
-        except Exception:
-            return None
-    
-    def save_lockfile(self, lockfile_data):
-        """Save lockfile with proper formatting"""
-        with open(self.lockfile, 'w') as f:
-            json.dump(lockfile_data, f, indent=4)
-    
-    def verify_package_integrity(self, name, expected_info):
-        """
-        Verify that an installed package matches expected state.
-        
-        Args:
-            name: Package name
-            expected_info: Expected package info from lockfile
-        
-        Returns:
-            tuple: (is_valid, error_message)
-        """
-        pkg_path = self.packages_dir / name
-        
-        # Check if package exists
-        if not pkg_path.exists():
-            return False, "Package not found"
-        
-        # For local packages, verify symlink and path
-        if expected_info.get("type") == "local":
-            if not pkg_path.is_symlink():
-                return False, "Expected symlink but found regular directory"
-            
-            expected_path = Path(expected_info.get("path"))
-            actual_target = pkg_path.resolve()
-            
-            if actual_target != expected_path:
-                return False, "Symlink points to {} instead of {}".format(actual_target, expected_path)
-            
-            return True, None
-        
-        # For remote packages, verify commit SHA if available
-        git_dir = pkg_path / ".git"
-        if git_dir.exists():
-            # This package has its own git repo (shouldn't happen with our install method)
-            return True, "Warning: Package has .git directory (unexpected)"
-        
-        # For copied packages, we can't verify commit without git metadata
-        # Just verify it exists
-        return True, None
-    
-    def install_from_lockfile(self, resolve_deps=True):
-        """Install packages using lockfile for reproducible builds."""
-        print("🔒 Installing from lockfile (reproducible build)...")
-        
-        lockfile_data = self.load_lockfile()
-        if not lockfile_data:
-            print("  ✗ Lockfile not found or invalid, performing fresh install")
-            return self.install_fresh(resolve_deps)
-        
-        packages = lockfile_data.get("packages", {})
-        install_order = lockfile_data.get("installation_order", [])
-        
-        if not packages:
-            print("  ✗ No packages in lockfile")
-            return 1
-        
-        print("   Found {} locked packages".format(len(packages)))
-        
-        # Recreate discovered packages from lockfile
-        for name in install_order:
-            pkg_info = packages.get(name)
-            if not pkg_info:
-                continue
-            
-            # Handle local packages
-            if pkg_info.get("type") == "local":
-                local_path = Path(pkg_info.get("path"))
-                config = {"repo": pkg_info.get("repo"), "path": ""}
-                self.discovered[name] = self._prepare_local_package(name, local_path, config)
-                continue
-            
-            # Handle remote packages - extract locked commit
-            ref = pkg_info.get("ref", {})
-            commit = ref.get("value") if ref.get("type") == "commit" else pkg_info.get("commit")
-            
-            if not commit or commit == "unknown":
-                print("  ⚠️  No commit SHA for {}, skipping".format(name))
-                continue
-            
-            # Build config with locked commit
-            config = {
-                "repo": pkg_info.get("repo"),
-                "path": pkg_info.get("path", ""),
-                "ref": {"type": "commit", "value": commit}
-            }
-            if "original_ref" in pkg_info:
-                config["original_ref"] = pkg_info["original_ref"]
-            
-            # Fetch if needed
-            repo_url = self.normalize_repo_url(config["repo"])
-            cache_key = self.get_cache_key(config["repo"], config["path"], "commit", commit)
-            cache_path = self.get_cache_path(cache_key)
-            
-            if not cache_path.exists():
-                print("📦 Fetching locked version of {}@{}...".format(name, commit[:8]))
-                self.sparse_checkout_package(repo_url, "commit", commit, config["path"], cache_path)
-            else:
-                print("  ✓ Using cached {}@{}".format(name, commit[:8]))
-            
-            self.discovered[name] = self._prepare_remote_package(name, config, cache_key, cache_path)
-        
-        # Run common install sequence
-        success_count = self._run_install_sequence(install_order)
-        
-        print("✅ Installed {} package(s) from lockfile".format(success_count))
-        return 0
-    
-    def install_fresh(self, resolve_deps=True):
-        """Perform fresh install, discovering dependencies and creating new lockfile."""
+    def install_fresh(self):
+        """Perform fresh install, discovering dependencies."""
         print("📋 Loading configuration...")
         
         # Load and merge packages
@@ -917,33 +790,20 @@ class GitPM:
         local_packages = self.load_local_overrides()
         root_packages = {**manifest_packages, **local_packages}
         
-        print("   Loaded {} package(s) ({} from manifest, {} local overrides)".format(
-            len(root_packages), len(manifest_packages), len(local_packages)
-        ))
+        print(f"   Loaded {len(root_packages)} package(s) ({len(manifest_packages)} from manifest, {len(local_packages)} local overrides)")
         
-        if resolve_deps:
-            # Full dependency resolution
-            print("🔍 Discovering dependencies...")
-            self.discover_dependencies(root_packages, local_overrides=local_packages)
-            print("   Found {} total packages".format(len(self.discovered)))
-            
-            print("📦 Planning installation order...")
-            install_order = self.topological_sort()
-            print("   Order: {}".format(" -> ".join(install_order)))
-            print("📥 Installing {} package(s)...".format(len(install_order)))
-        else:
-            # Flat install
-            print("📥 Installing {} package(s)...".format(len(root_packages)))
-            install_order = list(root_packages.keys())
-            
-            # Prepare packages for installation
-            for name, config in root_packages.items():
-                self._setup_package_for_install(name, config)
-        
+        # Full dependency resolution
+        print("🔍 Discovering dependencies...")
+        self.discover_dependencies(root_packages, local_overrides=local_packages)
+        print(f"   Found {len(self.discovered)} total packages")
+        print("📦 Planning installation order...")
+        install_order = self.topological_sort()
+        print(f"   Order: {" -> ".join(install_order)}")
+        print(f"📥 Installing {len(install_order)} package(s)...")
         # Run common install sequence
         success_count = self._run_install_sequence(install_order)
         
-        print("✅ Installation complete! ({}/{} packages)".format(success_count, len(install_order)))
+        print(f"✅ Installation complete! ({success_count}/{len(install_order)} packages)")
         return 0
     
     def update_gitignore(self):
@@ -955,7 +815,6 @@ class GitPM:
             ".git-packages/",
             ".git-pm.env",
             "git-pm.local",
-            "git-pm.lock"
         ]
         
         # Read existing .gitignore
@@ -994,16 +853,14 @@ class GitPM:
             if gitignore_path.exists():
                 print("✓ .gitignore up to date")
     
-    def cmd_install(self, resolve_deps=True, manage_gitignore=True, force_fresh=False):
+    def cmd_install(self, manage_gitignore=True):
         """
         Install all packages.
         
         Args:
-            resolve_deps: Whether to resolve dependencies
             manage_gitignore: Whether to update .gitignore
-            force_fresh: Force fresh install, ignore lockfile
         """
-        print("🚀 git-pm install{}".format(" (dependency resolution)" if resolve_deps else " (flat)"))
+        print("🚀 git-pm install")
         
         if not self.check_git():
             return 1
@@ -1012,15 +869,7 @@ class GitPM:
         if manage_gitignore:
             self.update_gitignore()
         
-        # Check if lockfile exists and should be used
-        if not force_fresh and self.lockfile.exists():
-            print("📋 Lockfile found, using for reproducible build")
-            print("   (Use --force-fresh to ignore lockfile)")
-            return self.install_from_lockfile(resolve_deps)
-        else:
-            if force_fresh:
-                print("📋 Forcing fresh install (ignoring lockfile)")
-            return self.install_fresh(resolve_deps)
+        return self.install_fresh()
     
     def generate_env_file(self):
         """Generate .git-pm.env file with package locations"""
@@ -1174,81 +1023,6 @@ class GitPM:
                 except Exception as e:
                     print("  ⚠ Failed to create symlink for {}/{}: {}".format(name, dep_name, e))
     
-    def cmd_update(self):
-        """Update packages (branches only)"""
-        print("🔄 git-pm update")
-        
-        if not self.check_git():
-            return 1
-        
-        print("📋 Loading configuration...")
-        
-        # Load manifest and local packages
-        manifest_packages = self.load_manifest()
-        if not manifest_packages:
-            print("Error: No packages in manifest")
-            return 1
-        
-        local_packages = self.load_local_overrides()
-        
-        # Merge packages
-        all_packages = {**manifest_packages, **local_packages}
-        
-        print("🔄 Updating packages...")
-        
-        updated = 0
-        skipped = 0
-        
-        for name, config in all_packages.items():
-            repo = config.get("repo")
-            repo_url = self.normalize_repo_url(repo)
-            
-            # Skip local packages - can't update local files
-            if self.is_local_package(repo_url):
-                print("📦 Skipping {} (local package)".format(name))
-                skipped += 1
-                continue
-            
-            ref = config.get("ref", {})
-            ref_type = ref.get("type", "branch")
-            
-            # Only update branch references
-            if ref_type == "branch":
-                print("📦 Updating {}...".format(name))
-                
-                path = config.get("path", "")
-                ref_value = ref.get("value", "main")
-                
-                # Resolve branch to latest commit
-                commit_sha = self.resolve_branch_to_commit(repo_url, ref_value)
-                if not commit_sha:
-                    continue
-                
-                # Update config with new commit
-                config["ref"] = {"type": "commit", "value": commit_sha}
-                config["original_ref"] = {"type": "branch", "value": ref_value}
-                
-                # Force re-clone
-                cache_key = self.get_cache_key(repo, path, "commit", commit_sha)
-                cache_path = self.get_cache_path(cache_key)
-                
-                if cache_path.exists():
-                    shutil.rmtree(cache_path)
-                
-                self.sparse_checkout_package(repo_url, "commit", commit_sha, path, cache_path)
-                
-                # Prepare and install
-                self.discovered[name] = self._prepare_remote_package(name, config, cache_key, cache_path)
-                
-                if self.install_package(name, self.discovered[name]):
-                    updated += 1
-            else:
-                print("📦 Skipping {} (not a branch reference)".format(name))
-                skipped += 1
-        
-        print("✅ Updated {} package(s), skipped {}".format(updated, skipped))
-        return 0
-    
     def _rmtree_windows_safe(self, path):
         """Remove directory tree, handling Windows read-only files"""
         def handle_remove_readonly(func, path, exc):
@@ -1276,123 +1050,8 @@ class GitPM:
             self._rmtree_windows_safe(self.packages_dir)
             print("✓ Removed {}".format(self.packages_dir))
         
-        if self.lockfile.exists():
-            self.lockfile.unlink()
-            print("✓ Removed lockfile")
-        
         print("✅ Clean complete!")
         return 0
-    
-    def cmd_list(self):
-        """List installed packages"""
-        print("📦 git-pm list")
-        
-        if not self.lockfile.exists():
-            print("No packages installed (no lockfile found)")
-            return 0
-        
-        lockfile = self._load_json_file(self.lockfile, "lockfile")
-        
-        packages = lockfile.get("packages", {})
-        if not packages:
-            print("No packages in lockfile")
-            return 0
-        
-        print("\nInstalled packages:")
-        for name, info in packages.items():
-            if info.get("type") == "local":
-                symlink_info = " (symlinked)" if info.get("symlinked") else ""
-                print("  {} - local: {}{}".format(name, info.get("path"), symlink_info))
-            else:
-                ref_str = "{}:{}".format(
-                    info.get("ref", {}).get("type"),
-                    info.get("ref", {}).get("value", "")[:8]
-                )
-                deps = info.get("dependencies", [])
-                deps_str = " [deps: {}]".format(", ".join(deps)) if deps else ""
-                print("  {} - {}@{} [{}]{}".format(
-                    name,
-                    info.get("repo"),
-                    ref_str,
-                    info.get("commit", "")[:8],
-                    deps_str
-                ))
-        
-        # Show installation order if available
-        order = lockfile.get("installation_order", [])
-        if order:
-            print("\nInstallation order: {}".format(" -> ".join(order)))
-        
-        return 0
-    
-    def cmd_verify(self):
-        """Verify integrity of installed packages against lockfile"""
-        print("🔍 git-pm verify")
-        
-        # Check if lockfile exists
-        if not self.lockfile.exists():
-            print("✗ No lockfile found")
-            print("  Run 'git-pm install' to create a lockfile")
-            return 1
-        
-        # Check if packages directory exists
-        if not self.packages_dir.exists():
-            print("✗ No packages installed (.git-packages directory not found)")
-            return 1
-        
-        # Load lockfile
-        lockfile_data = self.load_lockfile()
-        if not lockfile_data:
-            print("✗ Failed to load lockfile")
-            return 1
-        
-        packages = lockfile_data.get("packages", {})
-        if not packages:
-            print("✗ No packages in lockfile")
-            return 1
-        
-        print("Verifying {} package(s)...\n".format(len(packages)))
-        
-        valid_count = 0
-        invalid_count = 0
-        warnings = []
-        errors = []
-        
-        for name, expected_info in packages.items():
-            is_valid, error_msg = self.verify_package_integrity(name, expected_info)
-            
-            if is_valid:
-                if error_msg and error_msg.startswith("Warning"):
-                    print("  ⚠️  {} - {}".format(name, error_msg))
-                    warnings.append((name, error_msg))
-                    valid_count += 1
-                else:
-                    print("  ✓ {}".format(name))
-                    valid_count += 1
-            else:
-                print("  ✗ {} - {}".format(name, error_msg))
-                errors.append((name, error_msg))
-                invalid_count += 1
-        
-        print("\n" + "=" * 60)
-        print("Verification Summary:")
-        print("  ✓ Valid: {}".format(valid_count))
-        
-        if warnings:
-            print("  ⚠️  Warnings: {}".format(len(warnings)))
-        
-        if invalid_count > 0:
-            print("  ✗ Invalid: {}".format(invalid_count))
-            print("\nErrors found:")
-            for name, error_msg in errors:
-                print("  • {}: {}".format(name, error_msg))
-            print("\nRun 'git-pm install --force-fresh' to fix integrity issues")
-            return 1
-        else:
-            print("\n✅ All packages verified successfully!")
-            if warnings:
-                print("   (with {} warning(s))".format(len(warnings)))
-            return 0
     
     def cmd_add(self, name, repo, path, ref_type, ref_value):
         """Add a package to manifest"""
@@ -1453,25 +1112,12 @@ def main():
     # Install command
     install_parser = subparsers.add_parser("install", help="Install packages from manifest")
     install_parser.add_argument(
-        "--no-resolve-deps",
-        action="store_true",
-        help="Disable dependency resolution (flat install)"
-    )
-    install_parser.add_argument(
         "--no-gitignore",
         action="store_true",
         help="Skip automatic .gitignore management"
     )
-    install_parser.add_argument(
-        "--force-fresh",
-        action="store_true",
-        help="Force fresh install, ignore lockfile"
-    )
-    
-    subparsers.add_parser("update", help="Update packages to latest versions (branches only)")
+
     subparsers.add_parser("clean", help="Remove all installed packages")
-    subparsers.add_parser("list", help="List installed packages")
-    subparsers.add_parser("verify", help="Verify integrity of installed packages against lockfile")
     
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a package to the manifest")
@@ -1496,18 +1142,10 @@ def main():
     
     if args.command == "install":
         return gpm.cmd_install(
-            resolve_deps=not args.no_resolve_deps,
-            manage_gitignore=not args.no_gitignore,
-            force_fresh=args.force_fresh
+            manage_gitignore=not args.no_gitignore
         )
-    elif args.command == "update":
-        return gpm.cmd_update()
     elif args.command == "clean":
         return gpm.cmd_clean()
-    elif args.command == "list":
-        return gpm.cmd_list()
-    elif args.command == "verify":
-        return gpm.cmd_verify()
     elif args.command == "add":
         return gpm.cmd_add(args.name, args.repo, args.path, args.ref_type, args.ref_value)
     
