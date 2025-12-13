@@ -133,104 +133,10 @@ jobs:
           git config user.email "test@test.com"
           git config user.name "Test User"
           
-          python3 git-pm.py list > /dev/null 2>&1 || true
+          python3 git-pm.py install --help > /dev/null 2>&1 || true
           
           echo "✅ Config merging test completed"
           rm -f ~/.git-pm/config
-
-  test-lockfile:
-    name: Lockfile Features
-    runs-on: ubuntu-22.04
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.8'
-      
-      - name: Test lockfile reproducibility
-        run: |
-          echo "Testing lockfile..."
-          
-          # Create mock repo
-          mkdir -p test-lock/mock-repo
-          cd test-lock/mock-repo
-          git init
-          git config user.email "test@test.com"
-          git config user.name "Test User"
-          echo "v1" > file.txt
-          git add .
-          git commit -m "v1"
-          
-          # Create project
-          cd ..
-          mkdir project
-          cd project
-          cp ../../git-pm.py .
-          
-          cat > git-pm.json << EOF
-          {
-              "packages": {
-                  "test": {
-                      "repo": "file://$(pwd)/../mock-repo",
-                      "ref": {"type": "branch", "value": "main"}
-                  }
-              }
-          }
-          EOF
-          
-          git init
-          git config user.email "test@test.com"
-          git config user.name "Test User"
-          
-          # Install
-          python3 git-pm.py install --no-resolve-deps
-          
-          if [ ! -f "git-pm.lock" ]; then
-            echo "❌ Lockfile not created"
-            exit 1
-          fi
-          
-          python3 -c "import json; json.load(open('git-pm.lock'))"
-          echo "✅ Lockfile is valid JSON"
-          
-          LOCKED=$(python3 -c "import json; print(json.load(open('git-pm.lock'))['packages']['test']['commit'])")
-          echo "Locked: $LOCKED"
-          
-          python3 git-pm.py clean
-          python3 git-pm.py install --no-resolve-deps
-          
-          NEW_LOCKED=$(python3 -c "import json; print(json.load(open('git-pm.lock'))['packages']['test']['commit'])")
-          
-          if [ "$LOCKED" = "$NEW_LOCKED" ]; then
-            echo "✅ Reproducible build"
-          else
-            echo "❌ Not reproducible"
-            exit 1
-          fi
-      
-      - name: Test verify command
-        run: |
-          cd test-lock/project
-          
-          if python3 git-pm.py verify; then
-            echo "✅ Verify passes"
-          else
-            echo "❌ Verify failed"
-            exit 1
-          fi
-          
-          rm -rf .git-packages/test
-          
-          if ! python3 git-pm.py verify; then
-            echo "✅ Verify detects corruption"
-          else
-            echo "❌ Verify didn't detect corruption"
-            exit 1
-          fi
 
   test-local-overrides:
     name: Local Overrides (New Schema)
@@ -318,7 +224,7 @@ jobs:
           {"packages": {}}
           EOF
           
-          python ../git-pm.py list
+          python ../git-pm.py install --help
           echo "✅ Compatible with Python ${{ matrix.python-version }}"
 
   test-windows:
@@ -349,7 +255,7 @@ jobs:
           '@
           Set-Content -Path "git-pm.json" -Value $manifest
           
-          python ..\git-pm.py list
+          python ..\git-pm.py install --help
           Write-Host "✅ Windows compatible"
 
   lint-and-syntax:
@@ -378,24 +284,24 @@ jobs:
           fi
           echo "✅ YAML code removed"
       
-      - name: Check new features
+      - name: Verify refactoring
         run: |
           if ! grep -q "_deep_merge" git-pm.py; then
             echo "❌ Config merging missing"
             exit 1
           fi
           
-          if ! grep -q "def cmd_verify" git-pm.py; then
-            echo "❌ Verify command missing"
+          if grep -q "def cmd_verify" git-pm.py; then
+            echo "❌ Verify command still present (should be removed)"
             exit 1
           fi
           
-          if ! grep -q "install_from_lockfile" git-pm.py; then
-            echo "❌ Lockfile features missing"
+          if grep -q "install_from_lockfile" git-pm.py; then
+            echo "❌ Lockfile features still present (should be removed)"
             exit 1
           fi
           
-          echo "✅ All features present"
+          echo "✅ Refactoring verified (lockfile removed, core features intact)"
       
       - name: Check shebang
         run: |
