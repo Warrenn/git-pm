@@ -1,4 +1,5 @@
 {
+    "$schema": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.config.schema.json",
     "packages_dir": ".git-packages",
     "cache_dir": "/home/user/.cache/git-pm",
     "git_protocol": {

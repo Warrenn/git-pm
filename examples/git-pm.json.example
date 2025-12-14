@@ -1,4 +1,5 @@
 {
+    "$schema": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.schema.json",
     "packages": {
         "terraform-vpc": {
             "repo": "github.com/terraform-aws-modules/terraform-aws-vpc",

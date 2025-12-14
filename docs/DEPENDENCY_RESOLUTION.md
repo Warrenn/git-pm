@@ -2,7 +2,7 @@
 
 ## Overview
 
-git-pm v0.2.0 implements full dependency resolution with a unique approach: **explicit versioning only**, with automatic branch resolution to commits.
+git-pm v0.4.0 implements full dependency resolution with a unique approach: **explicit versioning only**, with automatic branch resolution to commits.
 
 ### Key Principles
 
@@ -16,25 +16,20 @@ git-pm v0.2.0 implements full dependency resolution with a unique approach: **ex
 
 ### Supported Reference Types
 
-```yaml
-packages:
-  # Tag - Immutable, exact version
-  pkg-a:
-    ref:
-      type: tag
-      value: v1.2.3
-  
-  # Branch - Resolves to latest commit
-  pkg-b:
-    ref:
-      type: branch
-      value: main
-  
-  # Commit - Exact SHA
-  pkg-c:
-    ref:
-      type: commit
-      value: abc123def456789
+```json
+{
+  "packages": {
+    "pkg-a": {
+      "ref": {"type": "tag", "value": "v1.2.3"}
+    },
+    "pkg-b": {
+      "ref": {"type": "branch", "value": "main"}
+    },
+    "pkg-c": {
+      "ref": {"type": "commit", "value": "abc123def456789"}
+    }
+  }
+}
 ```
 
 ### Why No Ranges?

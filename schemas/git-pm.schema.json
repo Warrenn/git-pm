@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.schema.json",
+  "title": "git-pm Package Manifest",
+  "description": "Configuration file for git-pm package dependencies",
+  "type": "object",
+  "properties": {
+    "packages": {
+      "type": "object",
+      "description": "Package dependencies keyed by package name",
+      "patternProperties": {
+        "^[a-zA-Z0-9_-]+$": {
+          "type": "object",
+          "description": "Package configuration",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository URL or identifier (github:owner/repo, https://..., file://...)",
+              "examples": [
+                "github:openai/gpt-4",
+                "https://github.com/anthropic/claude.git",
+                "file:///home/user/local-package",
+                "https://dev.azure.com/org/project/_git/repo"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "description": "Path within the repository to extract (empty for root)",
+              "default": "",
+              "examples": [
+                "",
+                "packages/core",
+                "src/components"
+              ]
+            },
+            "ref": {
+              "type": "object",
+              "description": "Git reference specification",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Type of git reference",
+                  "enum": ["tag", "branch", "commit"],
+                  "default": "branch"
+                },
+                "value": {
+                  "type": "string",
+                  "description": "Reference value (tag name, branch name, or commit SHA)",
+                  "examples": [
+                    "v1.0.0",
+                    "main",
+                    "develop",
+                    "abc123def456"
+                  ]
+                }
+              },
+              "required": ["type", "value"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["repo", "path", "ref"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["packages"],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "packages": {
+        "my-package": {
+          "repo": "github:owner/repo",
+          "path": "src/package",
+          "ref": {
+            "type": "tag",
+            "value": "v1.0.0"
+          }
+        },
+        "another-package": {
+          "repo": "https://github.com/org/repo.git",
+          "path": "",
+          "ref": {
+            "type": "branch",
+            "value": "main"
+          }
+        }
+      }
+    }
+  ]
+}

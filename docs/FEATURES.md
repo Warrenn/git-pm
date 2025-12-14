@@ -15,7 +15,7 @@
     - [Smart Caching](#smart-caching)
     - [Cross-Platform Support](#cross-platform-support)
     - [Azure DevOps Integration](#azure-devops-integration)
-  - [New Features (v0.2.0)](#new-features-v020)
+  - [New Features (v0.4.0)](#new-features-v040)
     - [Nested Dependency Symlinks](#nested-dependency-symlinks)
     - [Environment Variables Generation](#environment-variables-generation)
     - [Windows Symlink Support](#windows-symlink-support)
@@ -45,31 +45,42 @@
 **What it does:** Automatically discovers and installs all nested dependencies recursively.
 
 **Example:**
-```yaml
-# Your git-pm.yaml
-packages:
-  my-app:
-    repo: github.com/company/repo
-    path: app
-    ref:
-      type: tag
-      value: v1.0.0
+```json
+// Your git-pm.json
+{
+  "packages": {
+    "my-app": {
+      "repo": "github.com/company/repo",
+      "path": "app",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    }
+  }
+}
 
-# my-app/git-pm.yaml (nested)
-packages:
-  utils:
-    repo: github.com/company/shared
-    path: utils
-    ref:
-      type: tag
-      value: v2.0.0
-  
-  config:
-    repo: github.com/company/shared
-    path: config
-    ref:
-      type: tag
-      value: v1.5.0
+// my-app/git-pm.json (nested)
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/shared",
+      "path": "utils",
+      "ref": {
+        "type": "tag",
+        "value": "v2.0.0"
+      }
+    },
+    "config": {
+      "repo": "github.com/company/shared",
+      "path": "config",
+      "ref": {
+        "type": "tag",
+        "value": "v1.5.0"
+      }
+    }
+  }
+}
 ```
 
 **Result:**
@@ -92,8 +103,6 @@ $ git-pm install
 - ✅ Topological sorting (dependencies install first)
 - ✅ Circular dependency detection
 
-**Disable:** Use `--no-resolve-deps` for flat install
-
 ---
 
 ### Explicit Versioning
@@ -101,21 +110,30 @@ $ git-pm install
 **What it does:** Uses exact references (tag/branch/commit), no version ranges.
 
 **Supported reference types:**
-```yaml
-# Tag (recommended for releases)
-ref:
-  type: tag
-  value: v1.0.0
+```json
+// Tag (recommended for releases)
+{
+  "ref": {
+    "type": "tag",
+    "value": "v1.0.0"
+  }
+}
 
-# Branch (for active development)
-ref:
-  type: branch
-  value: main
+// Branch (for active development)
+{
+  "ref": {
+    "type": "branch",
+    "value": "main"
+  }
+}
 
-# Commit SHA (for precise control)
-ref:
-  type: commit
-  value: abc123def456
+// Commit SHA (for precise control)
+{
+  "ref": {
+    "type": "commit",
+    "value": "abc123def456"
+  }
+}
 ```
 
 **Benefits:**
@@ -175,17 +193,6 @@ packages:
 }
 ```
 
-**Update branches:**
-```bash
-$ git-pm update
-🔄 git-pm update
-📦 Updating dev-tools...
-  Branch: develop
-  Old commit: abc123
-  New commit: xyz789
-  ✓ Updated
-```
-
 **Benefits:**
 - ✅ Deterministic installs (same commit for same branch)
 - ✅ Can update to latest with `git-pm update`
@@ -199,28 +206,35 @@ $ git-pm update
 **What it does:** Each package can be at a different version/commit.
 
 **Example:**
-```yaml
-packages:
-  utils-stable:
-    repo: github.com/company/shared
-    path: utils
-    ref:
-      type: tag
-      value: v1.0.0  # Stable release
-
-  utils-beta:
-    repo: github.com/company/shared
-    path: utils
-    ref:
-      type: tag
-      value: v2.0.0-beta  # Beta testing
-
-  utils-dev:
-    repo: github.com/company/shared
-    path: utils
-    ref:
-      type: branch
-      value: develop  # Latest development
+```json
+{
+  "packages": {
+    "utils-stable": {
+      "repo": "github.com/company/shared",
+      "path": "utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    },
+    "utils-beta": {
+      "repo": "github.com/company/shared",
+      "path": "utils",
+      "ref": {
+        "type": "tag",
+        "value": "v2.0.0-beta"
+      }
+    },
+    "utils-dev": {
+      "repo": "github.com/company/shared",
+      "path": "utils",
+      "ref": {
+        "type": "branch",
+        "value": "develop"
+      }
+    }
+  }
+}
 ```
 
 **Result:**
@@ -262,15 +276,20 @@ monorepo/
 └── docs/            (300 MB)
 ```
 
-**git-pm.yaml:**
-```yaml
-packages:
-  utils:
-    repo: github.com/company/monorepo
-    path: packages/utils  # Only this directory
-    ref:
-      type: tag
-      value: v1.0.0
+**git-pm.json:**
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    }
+  }
+}
 ```
 
 **Result:**
@@ -419,7 +438,7 @@ repo: git@ssh.dev.azure.com:v3/org/project/repo
 
 ---
 
-## New Features (v0.2.0)
+## New Features (v0.4.0)
 
 ### Nested Dependency Symlinks
 
@@ -725,23 +744,22 @@ source = ".git-packages/packageA"  ✅ Works everywhere!
 ### Commands
 ```bash
 git-pm install                    # Install with dependency resolution
-git-pm install --no-resolve-deps  # Flat install (no dependencies)
 git-pm install --no-gitignore     # Skip .gitignore management
-git-pm update                     # Update branch-based packages
-git-pm list                       # List installed packages
-git-pm clean                      # Remove all packages
 git-pm add <name> <repo> [opts]   # Add package to manifest
+git-pm remove <name>              # Remove package from manifest and disk
+git-pm config <key> [value]       # Get or set configuration
+git-pm clean                      # Remove all packages
 git-pm --version                  # Show version
 ```
 
 ### Files
 ```
-git-pm.yaml          # Main manifest (commit)
-git-pm.local.yaml    # Local overrides (DO NOT commit)
+git-pm.json          # Main manifest (commit)
+git-pm.local         # Local overrides (DO NOT commit)
 git-pm.lock          # Lockfile (optional - apps commit, libs ignore)
 .git-pm.env          # Environment variables (DO NOT commit)
 .git-packages/       # Installed packages (DO NOT commit)
-.git-pm-cache/       # Cache directory (DO NOT commit)
+~/.cache/git-pm/     # Cache directory (DO NOT commit)
 ```
 
 ### Environment Variables
@@ -754,8 +772,8 @@ GIT_PM_PACKAGE_<NAME>         # Individual package path (from .git-pm.env)
 
 ---
 
-**Total Features:** 14 (8 core + 6 new in v0.2.0)  
-**Lines of Code:** ~1200  
+**Total Features:** 14 (8 core + 6 new in v0.4.0)  
+**Lines of Code:** ~1500  
 **Test Coverage:** Comprehensive CI/CD tests  
 **Platforms:** Linux, macOS, Windows  
-**Python:** 3.8+ required
+**Python:** 3.8+ required (3.7 may work but not tested)

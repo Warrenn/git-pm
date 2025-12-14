@@ -8,7 +8,7 @@ git-pm creates several files that should NEVER be committed to version control:
 |------|----------------|
 | `.git-packages/` | Installed dependencies (like node_modules) |
 | `.git-pm.env` | Absolute paths unique to each developer |
-| `git-pm.local.yaml` | Local overrides specific to your machine |
+| `git-pm.local` | Local overrides specific to your machine |
 | `git-pm.lock` | Optional - some teams commit, others don't |
 
 **Problem:** Developers might accidentally commit these files, causing:

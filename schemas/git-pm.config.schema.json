@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.config.schema.json",
+  "title": "git-pm Configuration",
+  "description": "Project-level or user-level configuration for git-pm",
+  "type": "object",
+  "properties": {
+    "packages_dir": {
+      "type": "string",
+      "description": "Directory where packages are installed (relative to project root)",
+      "default": ".git-packages",
+      "examples": [
+        ".git-packages",
+        ".deps",
+        "vendor",
+        "packages"
+      ]
+    },
+    "cache_dir": {
+      "type": "string",
+      "description": "Cache directory location for git objects",
+      "default": "~/.cache/git-pm",
+      "examples": [
+        "~/.cache/git-pm",
+        "/tmp/git-pm-cache",
+        "~/.local/cache/git-pm",
+        ".cache"
+      ]
+    },
+    "git_protocol": {
+      "type": "object",
+      "description": "Git protocol configuration (advanced)",
+      "default": {},
+      "additionalProperties": true
+    },
+    "url_patterns": {
+      "type": "object",
+      "description": "Custom URL pattern mappings (advanced)",
+      "default": {},
+      "patternProperties": {
+        ".*": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "azure_devops_pat": {
+      "type": "string",
+      "description": "Azure DevOps Personal Access Token (prefer environment variable AZURE_DEVOPS_PAT)",
+      "default": "",
+      "examples": [
+        "",
+        "your-pat-token-here"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "packages_dir": ".git-packages",
+      "cache_dir": "~/.cache/git-pm"
+    },
+    {
+      "packages_dir": ".deps",
+      "cache_dir": "/tmp/cache",
+      "git_protocol": {},
+      "url_patterns": {},
+      "azure_devops_pat": ""
+    }
+  ]
+}

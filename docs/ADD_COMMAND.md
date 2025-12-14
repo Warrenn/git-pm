@@ -1,6 +1,6 @@
 # git-pm add Command
 
-Add or update packages in your manifest without manually editing YAML files.
+Add or update packages in your manifest without manually editing JSON files.
 
 ## Basic Usage
 
@@ -27,14 +27,19 @@ python git-pm.py add utils github.com/company/utilities
 ```
 
 Creates:
-```yaml
-packages:
-  utils:
-    repo: github.com/company/utilities
-    path: ""
-    ref:
-      type: branch
-      value: main
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/utilities",
+      "path": "",
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    }
+  }
+}
 ```
 
 ### Add with Specific Path and Tag
@@ -46,14 +51,19 @@ python git-pm.py add auth github.com/company/monorepo \
 ```
 
 Creates:
-```yaml
-packages:
-  auth:
-    repo: github.com/company/monorepo
-    path: packages/auth
-    ref:
-      type: tag
-      value: v2.1.0
+```json
+{
+  "packages": {
+    "auth": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/auth",
+      "ref": {
+        "type": "tag",
+        "value": "v2.1.0"
+      }
+    }
+  }
+}
 ```
 
 ### Add from Azure DevOps
@@ -114,7 +124,7 @@ python git-pm.py install
 python git-pm.py add utils github.com/company/utils
 
 # Verify manifest was created
-cat git-pm.yaml
+cat git-pm.json
 
 # Install
 python git-pm.py install
@@ -123,11 +133,11 @@ python git-pm.py install
 ## Behavior
 
 ### Creates Manifest if Needed
-If `git-pm.yaml` doesn't exist, the add command creates it:
+If `git-pm.json` doesn't exist, the add command creates it:
 ```bash
 # No manifest exists yet
 python git-pm.py add mylib github.com/owner/repo
-# ✓ Creates git-pm.yaml with the package
+# ✓ Creates git-pm.json with the package
 ```
 
 ### Updates Existing Packages
@@ -149,7 +159,7 @@ When adding a new package:
 
 Adding new package: mypackage
 
-Saving manifest to git-pm.yaml...
+Saving manifest to git-pm.json...
 
 ✓ Package 'mypackage' added to manifest
 
@@ -168,7 +178,7 @@ When updating an existing package:
 
 Updating existing package: mypackage
 
-Saving manifest to git-pm.yaml...
+Saving manifest to git-pm.json...
 
 ✓ Package 'mypackage' added to manifest
 ...
@@ -187,7 +197,7 @@ usage: git-pm.py add [-h] [--path PATH] [--ref-type {tag,branch,commit}]
                      [--ref-value REF_VALUE]
                      name repo
 
-Add a new package to git-pm.yaml or update an existing package
+Add a new package to git-pm.json or update an existing package
 
 positional arguments:
   name                  Package name (how it will be referenced in your code)
@@ -221,7 +231,7 @@ python git-pm.py add dev-lib github.com/company/lib \
     --ref-type branch \
     --ref-value develop
 ```
-Branches update automatically when you run `install`.
+Branches resolve to the latest commit at install time.
 
 ### Use Commits for Exact Pinning
 ```bash
@@ -245,15 +255,12 @@ After adding packages:
 
 ```bash
 # 1. Review manifest
-cat git-pm.yaml
+cat git-pm.json
 
 # 2. Install packages
 python git-pm.py install
 
-# 3. Verify installation
-python git-pm.py list
-
-# 4. Use in your code
+# 3. Use in your code
 python
 >>> import sys
 >>> sys.path.insert(0, '.git-packages')
@@ -263,6 +270,10 @@ python
 ## See Also
 
 - `python git-pm.py install` - Install packages from manifest
-- `python git-pm.py list` - List installed packages
-- `python git-pm.py update` - Update packages to latest versions
+- `python git-pm.py remove <name>` - Remove package from manifest and disk
+- `python git-pm.py config <key>` - Get or set configuration values
 - `python git-pm.py clean` - Remove installed packages
+
+For more information:
+- [REMOVE_COMMAND_QUICK_REFERENCE.md](REMOVE_COMMAND_QUICK_REFERENCE.md) - Remove command reference
+- [CONFIG_QUICK_REFERENCE.md](CONFIG_QUICK_REFERENCE.md) - Config command reference

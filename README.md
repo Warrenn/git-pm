@@ -22,6 +22,7 @@ A lightweight, dependency-resolving package manager that uses git sparse-checkou
 ✅ **Automatic .gitignore** - Manages .gitignore entries to prevent accidental commits  
 ✅ **Path Resolution** - Solves dependency path conflicts between development and consumption  
 ✅ **Local Override Discovery** - Checks local overrides before cloning from remote  
+✅ **Package Management** - Add, remove, and configure packages with simple commands  
 
 ## Quick Start
 
@@ -56,28 +57,33 @@ git-pm add utils github.com/company/monorepo --path packages/utils --ref-type ta
 # Install packages (with dependency resolution)
 git-pm install
 
-# List installed packages
-git-pm list
+# Remove a package
+git-pm remove utils
 
-# Update branch-based packages
-git-pm update
+# Configure settings
+git-pm config packages_dir
 
 # Clean up
 git-pm clean
 ```
 
+**See also:**
+- [Add Command Documentation](docs/ADD_COMMAND.md)
+- [Remove Command Reference](docs/REMOVE_COMMAND_QUICK_REFERENCE.md)
+- [Config Command Reference](docs/CONFIG_QUICK_REFERENCE.md)
+
 ## Installation
 
 ### Requirements
 
-- **Python 3.8+** - Required (Python 3.7 may work but is not tested)
+- **Python 3.8+** - Required (3.7 may work but is not tested)
 - **git** - Required
 - **curl or wget** - For installation (Linux/macOS)
 
 ### Global Installation
 
 The installer automatically:
-1. ✅ Checks for Python 3.7+ and git
+1. ✅ Checks for Python 3.8+ and git
 2. ✅ Downloads the latest release (`git-pm.py`)
 3. ✅ Installs to user directory
 4. ✅ Adds to PATH
@@ -102,37 +108,44 @@ After installation, use either:
 
 ```bash
 git-pm --version
-# git-pm 0.2.0
+# git-pm 0.4.0
 ```
 
 ## Usage
 
 ### Creating a Manifest
 
-Create `git-pm.yaml` in your project root:
+Create `git-pm.json` in your project root:
 
-```yaml
-packages:
-  utils:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.0.0
-  
-  logger:
-    repo: github.com/company/monorepo
-    path: packages/logger
-    ref:
-      type: branch
-      value: main
-  
-  legacy-lib:
-    repo: github.com/other/repo
-    path: lib
-    ref:
-      type: commit
-      value: abc123def456
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    },
+    "logger": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/logger",
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    },
+    "legacy-lib": {
+      "repo": "github.com/other/repo",
+      "path": "lib",
+      "ref": {
+        "type": "commit",
+        "value": "abc123def456"
+      }
+    }
+  }
+}
 ```
 
 ### Adding Packages
@@ -154,43 +167,31 @@ git-pm add standalone github.com/user/standalone-repo --ref-type tag --ref-value
 ### Installing Packages
 
 ```bash
-# Install with dependency resolution (default)
 git-pm install
-
-# Install without dependency resolution (flat install)
-git-pm install --no-resolve-deps
 ```
 
-**With dependency resolution:**
+Features:
 - Automatically discovers nested dependencies
 - Resolves branches to latest commits
 - Installs in correct order (dependencies first)
 - Creates detailed lockfile with full dependency tree
+- Manages .gitignore entries automatically (use `--no-gitignore` to skip)
 
-**Without dependency resolution:**
-- Only installs packages from root manifest
-- Faster for simple projects
-- No recursive discovery
-
-### Updating Packages
+### Removing Packages
 
 ```bash
-git-pm update
+git-pm remove <package-name>
 ```
 
-Updates **branch-based** packages to latest commits. Tag and commit references are immutable and won't update.
+Removes a package from the manifest and disk, including unused dependencies.
 
-### Listing Packages
+### Configuration
 
 ```bash
-git-pm list
+git-pm config <key> [value]
 ```
 
-Shows:
-- Installed packages with versions
-- Dependencies (with `--resolve-deps`)
-- Installation order
-- Local overrides (symlinked)
+Get or set configuration values like `packages_dir` or `cache_dir`.
 
 ### Cleaning Up
 
@@ -206,7 +207,7 @@ Removes:
 
 ### How It Works
 
-1. **Discovery**: Recursively finds all dependencies by reading `git-pm.yaml` from each package
+1. **Discovery**: Recursively finds all dependencies by reading `git-pm.json` from each package
 2. **Branch Resolution**: Branches resolve to latest commit SHA
 3. **Explicit Versions**: All dependencies use exact tags/commits/resolved-commits
 4. **Topological Sort**: Installs in correct order (dependencies before dependents)
@@ -214,44 +215,60 @@ Removes:
 
 ### Example
 
-**Your project (`git-pm.yaml`):**
-```yaml
-packages:
-  api-client:
-    repo: github.com/company/monorepo
-    path: packages/api
-    ref:
-      type: tag
-      value: v3.0.0
+**Your project (`git-pm.json`):**
+```json
+{
+  "packages": {
+    "api-client": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/api",
+      "ref": {
+        "type": "tag",
+        "value": "v3.0.0"
+      }
+    }
+  }
+}
 ```
 
-**api-client's dependencies (`packages/api/git-pm.yaml`):**
-```yaml
-packages:
-  logger:
-    repo: github.com/company/monorepo
-    path: packages/logger
-    ref:
-      type: branch
-      value: main
-  
-  http-utils:
-    repo: github.com/company/monorepo
-    path: packages/http
-    ref:
-      type: tag
-      value: v1.5.0
+**api-client's dependencies (`packages/api/git-pm.json`):**
+```json
+{
+  "packages": {
+    "logger": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/logger",
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    },
+    "http-utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/http",
+      "ref": {
+        "type": "tag",
+        "value": "v1.5.0"
+      }
+    }
+  }
+}
 ```
 
-**http-utils' dependencies (`packages/http/git-pm.yaml`):**
-```yaml
-packages:
-  logger:
-    repo: github.com/company/monorepo
-    path: packages/logger
-    ref:
-      type: branch
-      value: main
+**http-utils' dependencies (`packages/http/git-pm.json`):**
+```json
+{
+  "packages": {
+    "logger": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/logger",
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    }
+  }
+}
 ```
 
 **Installation:**
@@ -293,21 +310,27 @@ $ git-pm install
 When a branch is referenced:
 1. Resolve branch to latest commit SHA
 2. All packages referencing that branch use the same resolved commit
-3. On `git-pm update`, re-resolve branches to new latest commits
-4. Cached in lockfile for deterministic reinstalls
+3. Cached in lockfile for deterministic reinstalls
+4. To update to latest, reinstall or modify the lockfile
 
 **Example:**
-```yaml
-# Both packages reference main branch
-packages:
-  pkg-a:
-    ref:
-      type: branch
-      value: main
-  pkg-b:
-    ref:
-      type: branch
-      value: main
+```json
+{
+  "packages": {
+    "pkg-a": {
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    },
+    "pkg-b": {
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    }
+  }
+}
 ```
 
 Both install with commit `abc12345` (same resolved commit for `main`).
@@ -316,13 +339,17 @@ Both install with commit `abc12345` (same resolved commit for `main`).
 
 ### Local Overrides
 
-Create `git-pm.local.yaml` for local development:
+Create `git-pm.local` for local development:
 
-```yaml
-overrides:
-  utils:
-    type: local
-    path: ../local-dev/utils  # Relative or absolute path
+```json
+{
+  "overrides": {
+    "utils": {
+      "type": "local",
+      "path": "../local-dev/utils"
+    }
+  }
+}
 ```
 
 **Behavior:**
@@ -338,11 +365,15 @@ overrides:
 git-pm install
 
 # 2. Create local override for development
-cat > git-pm.local.yaml << EOF
-overrides:
-  utils:
-    type: local
-    path: ../utils-dev
+cat > git-pm.local << EOF
+{
+  "overrides": {
+    "utils": {
+      "type": "local",
+      "path": "../utils-dev"
+    }
+  }
+}
 EOF
 
 # 3. Reinstall with override
@@ -352,7 +383,7 @@ git-pm install
 # Changes immediately visible in .git-packages/utils (symlinked)
 
 # 5. Remove override and reinstall from git
-rm git-pm.local.yaml
+rm git-pm.local
 git-pm install
 ```
 
@@ -397,28 +428,23 @@ git-pm install
 
 ## Configuration
 
-### User Configuration (`git-pm.config.yaml`)
+### User Configuration (`git-pm.config`)
 
 Optional configuration file in project root:
 
-```yaml
-# Custom packages directory
-packages_dir: .deps
-
-# Custom cache directory
-cache_dir: /custom/cache/path
-
-# Git protocol preference by domain
-git_protocol:
-  github.com: ssh
-  gitlab.com: https
-
-# Custom URL patterns
-url_patterns:
-  custom.git.com: "https://custom.git.com/{path}.git"
-
-# Azure DevOps PAT (alternatively use environment variable)
-azure_devops_pat: "your-token"
+```json
+{
+  "packages_dir": ".deps",
+  "cache_dir": "/custom/cache/path",
+  "git_protocol": {
+    "github.com": "ssh",
+    "gitlab.com": "https"
+  },
+  "url_patterns": {
+    "custom.git.com": "https://custom.git.com/{path}.git"
+  },
+  "azure_devops_pat": "your-token"
+}
 ```
 
 ### Cache Location
@@ -433,21 +459,27 @@ Override with `cache_dir` in config or `GIT_PM_CACHE_DIR` environment variable.
 
 ### Terraform Modules
 
-```yaml
-packages:
-  azure-bootstrap:
-    repo: dev.azure.com/org/terraform
-    path: modules/bootstrap
-    ref:
-      type: tag
-      value: v1.0.0
-  
-  azure-networking:
-    repo: dev.azure.com/org/terraform
-    path: modules/networking
-    ref:
-      type: tag
-      value: v2.1.0
+```json
+{
+  "packages": {
+    "azure-bootstrap": {
+      "repo": "dev.azure.com/org/terraform",
+      "path": "modules/bootstrap",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    },
+    "azure-networking": {
+      "repo": "dev.azure.com/org/terraform",
+      "path": "modules/networking",
+      "ref": {
+        "type": "tag",
+        "value": "v2.1.0"
+      }
+    }
+  }
+}
 ```
 
 ```hcl
@@ -460,21 +492,27 @@ module "bootstrap" {
 
 ### Shared Libraries
 
-```yaml
-packages:
-  common-utils:
-    repo: github.com/company/shared-libs
-    path: utils
-    ref:
-      type: branch
-      value: main
-  
-  validators:
-    repo: github.com/company/shared-libs
-    path: validators
-    ref:
-      type: tag
-      value: v3.0.0
+```json
+{
+  "packages": {
+    "common-utils": {
+      "repo": "github.com/company/shared-libs",
+      "path": "utils",
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    },
+    "validators": {
+      "repo": "github.com/company/shared-libs",
+      "path": "validators",
+      "ref": {
+        "type": "tag",
+        "value": "v3.0.0"
+      }
+    }
+  }
+}
 ```
 
 ```python
@@ -555,7 +593,7 @@ $env:Path += ";$env:USERPROFILE\.git-pm"
 
 ### Python Not Found
 
-Install Python 3.7+:
+Install Python 3.8+:
 - **Ubuntu/Debian:** `sudo apt install python3`
 - **macOS:** `brew install python3`
 - **Windows:** https://www.python.org/downloads/
@@ -590,21 +628,27 @@ For private repositories:
 
 ### Monorepo with Multiple Versions
 
-```yaml
-packages:
-  utils-v1:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.0.0
-  
-  utils-v2:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v2.0.0
+```json
+{
+  "packages": {
+    "utils-v1": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    },
+    "utils-v2": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v2.0.0"
+      }
+    }
+  }
+}
 ```
 
 Both versions install side-by-side as `utils-v1` and `utils-v2`.
@@ -739,7 +783,7 @@ git-pm automatically manages `.gitignore` entries on every install:
 # git-pm - Package manager files
 .git-packages/
 .git-pm.env
-git-pm.local.yaml
+git-pm.local
 git-pm.lock
 ```
 
@@ -749,7 +793,7 @@ $ git-pm install
 📝 Updating .gitignore...
   ✓ Added: .git-packages/
   ✓ Added: .git-pm.env
-  ✓ Added: git-pm.local.yaml
+  ✓ Added: git-pm.local
   ✓ Added: git-pm.lock
 ```
 
@@ -761,30 +805,39 @@ git-pm install --no-gitignore
 **Why these files should be ignored:**
 - `.git-packages/` - Installed dependencies (like node_modules)
 - `.git-pm.env` - Absolute paths (unique per developer)
-- `git-pm.local.yaml` - Local overrides (machine-specific)
+- `git-pm.local` - Local overrides (machine-specific)
 - `git-pm.lock` - Optional (commit for apps, ignore for libraries)
 
 ### Local Development with Overrides
 
-Create `git-pm.local.yaml` to override packages with local paths during development:
+Create `git-pm.local` to override packages with local paths during development:
 
-**git-pm.yaml:**
-```yaml
-packages:
-  my-package:
-    repo: github.com/company/repo
-    path: packages/my-package
-    ref:
-      type: tag
-      value: v1.0.0
+**git-pm.json:**
+```json
+{
+  "packages": {
+    "my-package": {
+      "repo": "github.com/company/repo",
+      "path": "packages/my-package",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    }
+  }
+}
 ```
 
-**git-pm.local.yaml:**
-```yaml
-overrides:
-  my-package:
-    type: local
-    path: ../local-dev/my-package
+**git-pm.local:**
+```json
+{
+  "overrides": {
+    "my-package": {
+      "type": "local",
+      "path": "../local-dev/my-package"
+    }
+  }
+}
 ```
 
 **Installation:**

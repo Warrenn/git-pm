@@ -31,16 +31,21 @@ python git-pm.py add utils github.com/company/monorepo \
 
 For complete documentation on the `add` command, including examples for GitHub, GitLab, and Azure DevOps, see **[ADD_COMMAND.md](ADD_COMMAND.md)**.
 
-Alternatively, you can manually edit `git-pm.yaml`:
+Alternatively, you can manually edit `git-pm.json`:
 
-```yaml
-packages:
-  utils:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.2.0
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.2.0"
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -58,14 +63,19 @@ Different developers use different authentication methods:
 
 The manifest uses **canonical identifiers** that are independent of authentication:
 
-```yaml
-packages:
-  utils:
-    repo: github.com/company/monorepo  # Canonical form
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.2.0
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.2.0"
+      }
+    }
+  }
+}
 ```
 
 The tool automatically resolves this to the appropriate URL based on:
@@ -108,20 +118,26 @@ Auto-detect SSH availability:
 
 **Developer with SSH keys:**
 
-```yaml
-# ~/.git-pm/config.yaml
-git_protocol:
-  github.com: ssh
+```json
+// ~/.git-pm/config
+{
+  "git_protocol": {
+    "github.com": "ssh"
+  }
+}
 ```
 
 Result: `git@github.com:company/repo.git`
 
 **Developer preferring HTTPS:**
 
-```yaml
-# ~/.git-pm/config.yaml
-git_protocol:
-  github.com: https
+```json
+// ~/.git-pm/config
+{
+  "git_protocol": {
+    "github.com": "https"
+  }
+}
 ```
 
 Result: `https://github.com/company/repo.git`
@@ -137,7 +153,7 @@ Result: `https://ghp_abc123...@github.com/company/repo.git`
 
 ### Benefits
 
-✅ **Portable manifest** - Same git-pm.yaml works for everyone  
+✅ **Portable manifest** - Same git-pm.json works for everyone  
 ✅ **Developer choice** - Each developer uses their preferred method  
 ✅ **CI/CD friendly** - Easy token injection  
 ✅ **Consistent caching** - Cache key uses canonical form  
@@ -154,11 +170,16 @@ Code needs to work the same way regardless of how git URLs are configured.
 
 The package **name** in the manifest becomes the directory name in `.git-packages/`:
 
-```yaml
-packages:
-  utils:          # ← This becomes .git-packages/utils/
-    repo: github.com/company/monorepo
-    path: packages/utils
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils"
+    }
+  }
+}
+// utils becomes .git-packages/utils/
 ```
 
 Your code always imports from the same location:
@@ -176,7 +197,7 @@ from components import Button
 
 ```
 your-project/
-├── git-pm.yaml
+├── git-pm.json
 ├── .git-packages/
 │   ├── utils/           → symlink to cache
 │   ├── components/      → symlink to cache
@@ -249,11 +270,15 @@ Edit files in `monorepo-local/packages/utils/`, and they're instantly available 
 git clone git@github.com:company/monorepo.git ~/workspace/monorepo-local
 
 # 2. Create override
-cat > git-pm.local.yaml << EOF
-overrides:
-  utils:
-    type: local
-    path: ~/workspace/monorepo-local/packages/utils
+cat > git-pm.local << 'EOF'
+{
+  "overrides": {
+    "utils": {
+      "type": "local",
+      "path": "~/workspace/monorepo-local/packages/utils"
+    }
+  }
+}
 EOF
 
 # 3. Install (uses local version)
@@ -268,39 +293,47 @@ cd ~/your-project
 python test.py  # Uses local version
 
 # 6. When done, commit to monorepo and remove override
-rm git-pm.local.yaml
+rm git-pm.local
 python git-pm.py install  # Back to git version
 ```
 
 **Scenario B: Developing a new package**
 
-```yaml
-# git-pm.yaml - Add your new package
-packages:
-  my-new-feature:
-    type: local
-    path: ../my-new-feature
+```json
+// git-pm.local - Add your new package
+{
+  "overrides": {
+    "my-new-feature": {
+      "type": "local",
+      "path": "../my-new-feature"
+    }
+  }
+}
 ```
 
-No override needed - local packages can be in the main manifest during development.
+Use local overrides for development without modifying the main manifest.
 
 ### Multiple Overrides
 
 You can override multiple packages:
 
-```yaml
-overrides:
-  utils:
-    type: local
-    path: ../monorepo-local/packages/utils
-  
-  components:
-    type: local
-    path: ../monorepo-local/packages/components
-  
-  data-models:
-    type: local
-    path: /absolute/path/to/data-models
+```json
+{
+  "overrides": {
+    "utils": {
+      "type": "local",
+      "path": "../monorepo-local/packages/utils"
+    },
+    "components": {
+      "type": "local",
+      "path": "../monorepo-local/packages/components"
+    },
+    "data-models": {
+      "type": "local",
+      "path": "/absolute/path/to/data-models"
+    }
+  }
+}
 ```
 
 ### Benefits
@@ -501,28 +534,34 @@ key = SHA256(
 
 **Branches (Mutable):**
 - Cached on first install
-- Updated on install (if `auto_update_branches: true`)
-- Explicitly updated via `update` command
+- Resolves to latest commit on install
+- Cache can be cleared and rebuilt
 
 ### Multiple Versions
 
 You can have multiple versions of the same package cached:
 
-```yaml
-packages:
-  utils-stable:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.0.0
-  
-  utils-latest:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: branch
-      value: main
+```json
+{
+  "packages": {
+    "utils-stable": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    },
+    "utils-latest": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "branch",
+        "value": "main"
+      }
+    }
+  }
+}
 ```
 
 Cache will have two entries:
@@ -534,11 +573,8 @@ Cache will have two entries:
 Manual cleanup:
 
 ```bash
-# Remove installed packages only
+# Remove installed packages
 python git-pm.py clean
-
-# Remove installed packages and cache
-python git-pm.py clean --cache
 ```
 
 The cache is safe to delete - it will be repopulated on next install.
@@ -551,12 +587,12 @@ The cache is safe to delete - it will be repopulated on next install.
 
 ```
 User Config (lowest priority)
-    ~/.git-pm/config.yaml
+    ~/.git-pm/config
 
         ↓ (merged)
 
 Project Config (overrides user)
-    .git-pm/config.yaml
+    git-pm.config
 
         ↓ (merged)
 
@@ -566,44 +602,39 @@ Environment Variables (highest priority)
 
 ### User-Level Config
 
-Location: `~/.git-pm/config.yaml`
+Location: `~/.git-pm/config`
 
 Purpose: Personal preferences for all projects
 
 Example:
 
-```yaml
-# My preferred defaults
-cache_dir: ~/.cache/git-pm
-packages_dir: .git-packages
-
-git_protocol:
-  github.com: ssh
-  gitlab.com: ssh
-
-credentials:
-  dev.azure.com:
-    token: ${ADO_PAT}
+```json
+{
+  "cache_dir": "~/.cache/git-pm",
+  "packages_dir": ".git-packages",
+  "git_protocol": {
+    "github.com": "ssh",
+    "gitlab.com": "ssh"
+  },
+  "azure_devops_pat": ""
+}
 ```
 
 ### Project-Level Config
 
-Location: `.git-pm/config.yaml`
+Location: `git-pm.config`
 
 Purpose: Project-specific settings (team can decide to commit or not)
 
 Example:
 
-```yaml
-# Force HTTPS for this project
-git_protocol:
-  github.com: https
-
-# Custom package directory
-packages_dir: .packages
-
-# Disable auto-update
-auto_update_branches: false
+```json
+{
+  "git_protocol": {
+    "github.com": "https"
+  },
+  "packages_dir": ".packages"
+}
 ```
 
 ### Environment Variables
@@ -627,23 +658,27 @@ GIT_PM_PACKAGES_DIR=".custom-packages"
 ### Configuration Precedence Example
 
 **User config:**
-```yaml
-packages_dir: .my-packages
-auto_update_branches: true
-git_protocol:
-  github.com: ssh
+```json
+{
+  "packages_dir": ".my-packages",
+  "git_protocol": {
+    "github.com": "ssh"
+  }
+}
 ```
 
 **Project config:**
-```yaml
-packages_dir: .git-packages
-git_protocol:
-  github.com: https
+```json
+{
+  "packages_dir": ".git-packages",
+  "git_protocol": {
+    "github.com": "https"
+  }
+}
 ```
 
 **Result:**
 - `packages_dir`: `.git-packages` (project overrides user)
-- `auto_update_branches`: `true` (from user, not overridden)
 - `git_protocol.github.com`: `https` (project overrides user)
 
 ---
@@ -658,22 +693,27 @@ git-pm uses a **flat structure with explicit versions** (Strategy 1 from design)
 
 If two packages need different versions, you must explicitly decide:
 
-```yaml
-packages:
-  # Use two different names for different versions
-  utils-v1:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.0.0
-  
-  utils-v2:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v2.0.0
+```json
+{
+  "packages": {
+    "utils-v1": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.0.0"
+      }
+    },
+    "utils-v2": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v2.0.0"
+      }
+    }
+  }
+}
 ```
 
 Result:
@@ -693,28 +733,22 @@ Result:
 ### Best Practices
 
 1. **Use tags for production**
-   ```yaml
-   ref:
-     type: tag
-     value: v1.2.0
+   ```json
+   {"ref": {"type": "tag", "value": "v1.2.0"}}
    ```
 
 2. **Use branches for development**
-   ```yaml
-   ref:
-     type: branch
-     value: main
+   ```json
+   {"ref": {"type": "branch", "value": "main"}}
    ```
 
 3. **Pin commits for absolute stability**
-   ```yaml
-   ref:
-     type: commit
-     value: abc123def456...
+   ```json
+   {"ref": {"type": "commit", "value": "abc123def456"}}
    ```
 
 4. **Name packages clearly**
-   ```yaml
+   ```json
    packages:
      utils-stable:  # Clear which version
        ref:

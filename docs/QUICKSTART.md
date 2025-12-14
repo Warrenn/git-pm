@@ -17,11 +17,11 @@ Replace `v0.0.6` and `0.0.6` with the latest release version from: https://githu
 
 ### Manual Download
 
-Alternatively, download `git-pm.py` directly and run it with Python 3.7+.
+Alternatively, download `git-pm.py` directly and run it with Python 3.8+.
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 3.8 or higher (3.7 may work but is not tested)
 - Git command-line tool
 
 **That's it!** No external dependencies needed - git-pm uses only Python's standard library.
@@ -39,22 +39,27 @@ python git-pm.py add utils github.com/company/monorepo \
     --ref-value v1.2.0
 ```
 
-This creates `git-pm.yaml` automatically.
+This creates `git-pm.json` automatically.
 
 **See [ADD_COMMAND.md](ADD_COMMAND.md) for complete add command documentation.**
 
 **Option B: Create manually**
 
-Create `git-pm.yaml` in your project root:
+Create `git-pm.json` in your project root:
 
-```yaml
-packages:
-  utils:
-    repo: github.com/company/monorepo
-    path: packages/utils
-    ref:
-      type: tag
-      value: v1.2.0
+```json
+{
+  "packages": {
+    "utils": {
+      "repo": "github.com/company/monorepo",
+      "path": "packages/utils",
+      "ref": {
+        "type": "tag",
+        "value": "v1.2.0"
+      }
+    }
+  }
+}
 ```
 
 ### 2. Install packages
@@ -95,17 +100,15 @@ python git-pm.py add auth github.com/company/monorepo \
 # Install all packages from manifest
 python git-pm.py install
 
-# Update packages (refresh branches to latest)
-python git-pm.py update
+# Remove a package from manifest and disk
+python git-pm.py remove utils
 
-# List installed packages
-python git-pm.py list
+# Get or set configuration values
+python git-pm.py config packages_dir
+python git-pm.py config packages_dir ".deps"
 
 # Clean installed packages
 python git-pm.py clean
-
-# Clean packages and cache
-python git-pm.py clean --cache
 ```
 
 For complete add command documentation, see [ADD_COMMAND.md](ADD_COMMAND.md).
@@ -114,13 +117,17 @@ For complete add command documentation, see [ADD_COMMAND.md](ADD_COMMAND.md).
 
 When working on a package locally:
 
-1. Create `git-pm.local.yaml`:
+1. Create `git-pm.local`:
 
-```yaml
-overrides:
-  utils:
-    type: local
-    path: ../my-local-utils
+```json
+{
+  "overrides": {
+    "utils": {
+      "type": "local",
+      "path": "../my-local-utils"
+    }
+  }
+}
 ```
 
 2. Run install:
@@ -173,19 +180,23 @@ jobs:
 
 ## Configuration
 
-### User-level config: `~/.git-pm/config.yaml`
+### User-level config: `~/.git-pm/config`
 
-```yaml
-git_protocol:
-  github.com: ssh
-packages_dir: .git-packages
+```json
+{
+  "git_protocol": {
+    "github.com": "ssh"
+  },
+  "packages_dir": ".git-packages"
+}
 ```
 
-### Project-level config: `.git-pm/config.yaml`
+### Project-level config: `git-pm.config`
 
-```yaml
-packages_dir: .custom-packages
-auto_update_branches: false
+```json
+{
+  "packages_dir": ".custom-packages"
+}
 ```
 
 ## .gitignore
@@ -194,7 +205,9 @@ Add to your `.gitignore`:
 
 ```
 .git-packages/
-git-pm.local.yaml
+git-pm.local
+git-pm.lock
+.git-pm.env
 ```
 
 ## Troubleshooting
@@ -221,8 +234,15 @@ Check that the `path` in your manifest matches the actual directory structure in
 ## Examples
 
 See the `examples/` directory for complete examples of:
-- `git-pm.yaml` - Main manifest
-- `git-pm.local.yaml` - Local overrides
-- `user-config.yaml` - User configuration
-- `project-config.yaml` - Project configuration
-- `.gitignore` - Recommended gitignore entries
+- `git-pm.json.example` - Main manifest
+- `git-pm.local.example` - Local overrides
+- `git-pm.config.example` - Configuration
+- `.gitignore.example` - Recommended gitignore entries
+
+## Additional Documentation
+
+- [ADD_COMMAND.md](ADD_COMMAND.md) - Complete add command reference
+- [REMOVE_COMMAND_QUICK_REFERENCE.md](REMOVE_COMMAND_QUICK_REFERENCE.md) - Remove command reference
+- [CONFIG_QUICK_REFERENCE.md](CONFIG_QUICK_REFERENCE.md) - Config command reference
+- [FEATURES.md](FEATURES.md) - Complete feature guide
+- [REFERENCE.md](REFERENCE.md) - Quick reference card

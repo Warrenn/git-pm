@@ -1,4 +1,5 @@
 {
+    "$schema": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.local.schema.json",
     "packages": {
         "my-package": {
             "repo": "../local-dev-version"

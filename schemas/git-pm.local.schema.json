@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.local.schema.json",
+  "title": "git-pm Local Overrides",
+  "description": "Local development overrides for git-pm packages (not committed to version control)",
+  "type": "object",
+  "properties": {
+    "packages": {
+      "type": "object",
+      "description": "Package overrides keyed by package name (must match names in git-pm.json)",
+      "patternProperties": {
+        "^[a-zA-Z0-9_-]+$": {
+          "type": "object",
+          "description": "Package override configuration (typically for local development)",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "Repository URL or identifier (typically file:// for local development)",
+              "examples": [
+                "file:///home/user/dev/my-package",
+                "file:///Users/developer/projects/package",
+                "file://C:/dev/local-package",
+                "github:owner/fork"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "description": "Path within the repository to extract (empty for root)",
+              "default": "",
+              "examples": [
+                "",
+                "src",
+                "dist"
+              ]
+            },
+            "ref": {
+              "type": "object",
+              "description": "Git reference specification",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Type of git reference",
+                  "enum": ["tag", "branch", "commit"],
+                  "default": "branch"
+                },
+                "value": {
+                  "type": "string",
+                  "description": "Reference value (for local repos, typically a branch)",
+                  "examples": [
+                    "main",
+                    "develop",
+                    "feature-branch"
+                  ]
+                }
+              },
+              "required": ["type", "value"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["repo", "path", "ref"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["packages"],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "packages": {
+        "my-package": {
+          "repo": "file:///home/user/dev/my-package",
+          "path": "",
+          "ref": {
+            "type": "branch",
+            "value": "develop"
+          }
+        }
+      }
+    }
+  ]
+}

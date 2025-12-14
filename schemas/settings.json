@@ -1,0 +1,21 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["git-pm.json"],
+      "url": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.schema.json"
+    },
+    {
+      "fileMatch": ["git-pm.local"],
+      "url": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.local.schema.json"
+    },
+    {
+      "fileMatch": ["git-pm.config", ".git-pm/config"],
+      "url": "https://raw.githubusercontent.com/Warrenn/git-pm/main/schemas/git-pm.config.schema.json"
+    }
+  ],
+  "files.associations": {
+    "git-pm.local": "json",
+    "git-pm.config": "json",
+    ".git-pm/config": "json"
+  }
+}
