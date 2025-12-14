@@ -30,22 +30,22 @@ A lightweight, dependency-resolving package manager that uses git sparse-checkou
 
 **Linux/macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Warrenn/git-pm/main/install-git-pm.sh | bash
+curl -fsSL https://github.com/Warrenn/git-pm/releases/latest/download/install-git-pm.sh | bash
 ```
 
 **Windows (PowerShell as Administrator recommended):**
 ```powershell
-irm https://raw.githubusercontent.com/Warrenn/git-pm/main/install-git-pm.ps1 | iex
+irm https://github.com/Warrenn/git-pm/releases/latest/download/install-git-pm.ps1 | iex
 ```
 
 **Windows (User-level, no admin):**
 ```powershell
-irm https://raw.githubusercontent.com/Warrenn/git-pm/main/install-git-pm.ps1 | iex
+irm https://github.com/Warrenn/git-pm/releases/latest/download/install-git-pm.ps1 | iex
 ```
 
 **Windows (System-level, requires admin):**
 ```powershell
-irm https://raw.githubusercontent.com/Warrenn/git-pm/main/install-git-pm.ps1 | iex -System
+irm https://github.com/Warrenn/git-pm/releases/latest/download/install-git-pm.ps1 | iex -System
 ```
 
 ### Basic Usage

@@ -3,7 +3,7 @@
 git-pm: Git Package Manager
 A package manager that uses git sparse-checkout to manage dependencies with full dependency resolution.
 
-Version 0.2.9 - Full dependency resolution with explicit versions
+Version 0.4.1 - Full dependency resolution with explicit versions
 Requires Python 3.8+ (3.7 may work but is not tested)
 """
 
@@ -19,7 +19,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Fix Windows encoding issues with Unicode characters (emojis)
 if sys.platform == 'win32':
     # Set UTF-8 encoding for stdout and stderr
     import io
@@ -28,7 +27,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 class GitPM:

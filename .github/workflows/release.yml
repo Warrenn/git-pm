@@ -114,14 +114,25 @@ jobs:
           fi
           echo "✅ Remove command present"
           
+          # Check that config command exists (v0.4.0+)
+          if ! grep -q "def cmd_config" git-pm.py; then
+            echo "❌ Config command not found (required for v0.4.0+)"
+            exit 1
+          fi
+          echo "✅ Config command present"
+          
           # Test basic commands
           python3 git-pm.py --version || exit 1
-          python3 git-pm.py --help | grep -q "install.*clean.*remove.*add" || exit 1
-          echo "✅ Commands work (install, clean, remove, add)"
+          python3 git-pm.py --help | grep -q "install.*clean.*remove.*config.*add" || exit 1
+          echo "✅ Commands work (install, clean, remove, config, add)"
           
           # Test remove command specifically
           python3 git-pm.py remove --help | grep -q "package" || exit 1
           echo "✅ Remove command functional"
+          
+          # Test config command specifically
+          python3 git-pm.py config --help | grep -q "Configuration key" || exit 1
+          echo "✅ Config command functional"
           
           echo "✅ Pre-release validation passed"
       
@@ -150,13 +161,14 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
+          RELEASE_DATE=$(date +%Y-%m-%d)
           cat > release_notes.md << 'NOTES_EOF'
           # git-pm ${{ steps.version.outputs.version }} - Git Package Manager
           
           ## 🎉 Release Information
           
           **Version:** ${{ steps.version.outputs.version }}  
-          **Release Date:** $(date +%Y-%m-%d)  
+          **Release Date:** RELEASE_DATE_PLACEHOLDER  
           **Repository:** [${{ env.REPO_FULL }}](${{ env.REPO_URL }})  
           **Tag:** [${{ steps.version.outputs.version }}](${{ env.REPO_URL }}/releases/tag/${{ steps.version.outputs.version }})  
           
@@ -167,119 +179,141 @@ jobs:
           - **Lines Added:** ${{ steps.stats.outputs.insertions }}
           - **Lines Removed:** ${{ steps.stats.outputs.deletions }}
           
-          ## ✨ What's New in v0.3.0
+          ## ✨ What's New in v0.4.1
           
-          ### 🗑️ New Feature: Remove Command
+          ### ⚙️ New Feature: Config Command
           
-          This release adds the highly-requested **`remove` command** with intelligent dependency management and deep recursion analysis!
+          This release adds the **`config` command** for convenient CLI-based configuration management!
           
           **New Command:**
           ```bash
-          git-pm remove <package-name> [-y]
+          git-pm config [options]
           ```
           
           ### 🎯 Key Features
           
-          - ✅ **Smart dependency cascade** - Automatically removes unused dependencies
-          - ✅ **Deep recursion analysis** - Analyzes dependencies at any depth (3+ levels)
-          - ✅ **Preserves shared dependencies** - Never breaks other packages
-          - ✅ **Multi-path detection** - Correctly handles packages referenced multiple ways
-          - ✅ **Dual manifest support** - Removes from both git-pm.json and git-pm.local
-          - ✅ **Environment file cleanup** - Updates .git-pm.env automatically
-          - ✅ **Preview before removal** - Shows what will be removed (unless -y flag)
-          - ✅ **Safe by design** - No --force flag, never breaks dependencies
+          - ✅ **Get configuration values** - Retrieve current settings
+          - ✅ **Set at project level** - Configure current project
+          - ✅ **Set at user level** - Configure globally with --global
+          - ✅ **Unset values** - Remove configuration settings
+          - ✅ **List all settings** - View merged configuration with sources
+          - ✅ **Auto-create files** - Creates config files automatically
+          - ✅ **Key validation** - Prevents typos with helpful errors
+          - ✅ **Source indicators** - Shows where each value comes from
           
           ### 📖 How It Works
           
-          **Example Dependency Tree:**
-          ```
-          project
-          ├── pkg-a ─────────┐
-          │   ├── pkg-b ───┐ │
-          │   │   └── pkg-d │  ← Shared dependency!
-          │   └── pkg-c ───┤ │
-          │       └── pkg-d │
-          └── pkg-x ─────────┘
-              └── pkg-d
-          ```
+          **Configuration Levels (Priority Order):**
+          1. **Project config** (`git-pm.config`) - Highest priority
+          2. **User config** (`~/.git-pm/config`) - Medium priority
+          3. **Defaults** (built-in) - Lowest priority
           
-          **Remove pkg-a:**
+          ### 🔧 Config Command Usage
+          
+          **Get a value:**
           ```bash
-          $ git-pm remove pkg-a
-          
-          📦 Removal plan:
-            ✓ Remove pkg-a (explicitly requested)
-            ✓ Remove pkg-b (only needed by pkg-a)
-            ✓ Remove pkg-c (only needed by pkg-a)
-            ✓ Keep pkg-d (still needed by pkg-x)
-            ✓ Keep pkg-x (still in manifest)
-          
-          Proceed? (y/N): y
-          
-          ✅ Successfully removed 'pkg-a'
-             Removed 3 packages from disk
+          $ git-pm config packages_dir
+          .git-packages
           ```
           
-          **Result:** pkg-a, pkg-b, and pkg-c removed. pkg-d and pkg-x preserved (still needed).
+          **Set at project level:**
+          ```bash
+          $ git-pm config packages_dir ".deps"
+          ✓ Set packages_dir = .deps in project config
+          ```
           
-          ### 🛡️ Safety Features
+          **Set at user level (--global):**
+          ```bash
+          $ git-pm config --global cache_dir "/tmp/cache"
+          ✓ Set cache_dir = /tmp/cache in user config
+          ```
           
-          - ✅ Never breaks dependencies
-          - ✅ Shows preview before removing
-          - ✅ Requires confirmation (unless -y)
-          - ✅ Preserves packages in use
-          - ✅ Handles circular dependencies
-          - ✅ Works with nested symlinks
-          - ✅ No --force flag (intentional)
+          **List all settings with sources:**
+          ```bash
+          $ git-pm config --list
+          ⚙️  git-pm config
           
-          ### 🔧 What Remove Does
+          Configuration (merged view):
           
-          1. **Analyzes dependencies** - Recursively discovers what will remain
-          2. **Removes from manifests** - Updates git-pm.json and git-pm.local
-          3. **Removes from disk** - Only packages no longer needed
-          4. **Updates environment** - Cleans .git-pm.env entries
-          5. **Preserves cache** - Never touches ~/.cache/git-pm/
+          azure_devops_pat=(empty) (default)
+          cache_dir=/tmp/cache (user)
+          git_protocol={} (default)
+          packages_dir=.deps (project)
+          url_patterns={} (default)
+          ```
           
-          ### 📋 Remove Command Options
+          **Unset a value:**
+          ```bash
+          $ git-pm config --unset packages_dir
+          ✓ Unset packages_dir in project config
           
-          | Option | Description |
-          |--------|-------------|
-          | `-y, --yes` | Skip confirmation prompt |
-          | `-h, --help` | Show help message |
+          # Falls back to user or default value
+          $ git-pm config packages_dir
+          .git-packages
+          ```
+          
+          ### 📋 Config Command Options
+          
+          | Command | Description |
+          |---------|-------------|
+          | `config <key>` | Get value (shows merged result) |
+          | `config <key> <value>` | Set value (project level) |
+          | `config --global <key> <value>` | Set value (user level) |
+          | `config --unset <key>` | Unset value (project level) |
+          | `config --unset --global <key>` | Unset value (user level) |
+          | `config --list` | List all settings with sources |
+          
+          ### 🔑 Configuration Keys
+          
+          | Key | Description | Default |
+          |-----|-------------|---------|
+          | `packages_dir` | Where packages install | `.git-packages` |
+          | `cache_dir` | Cache location | `~/.cache/git-pm` |
+          | `git_protocol` | Git protocol settings | `{}` |
+          | `url_patterns` | URL mappings | `{}` |
+          | `azure_devops_pat` | Azure PAT token | `""` |
           
           ### 📚 Example Scenarios
           
-          **Remove unused package:**
+          **Change install directory:**
           ```bash
-          git-pm remove old-package -y
+          git-pm config packages_dir ".modules"
           ```
           
-          **Remove package with dependencies:**
+          **Use SSD for cache:**
           ```bash
-          git-pm remove parent-package
-          # Automatically removes child packages if not needed elsewhere
+          git-pm config --global cache_dir "/mnt/ssd/git-pm-cache"
           ```
           
-          **Remove from both manifests:**
+          **Review all settings:**
           ```bash
-          git-pm remove override-package -y
-          # Removes from git-pm.json AND git-pm.local
+          git-pm config --list
+          ```
+          
+          **Reset to defaults:**
+          ```bash
+          git-pm config --unset packages_dir
+          git-pm config --unset --global packages_dir
           ```
           
           ## 🚀 Quick Start
           
-          ### Available Commands (Updated for v0.3.0)
+          ### Available Commands (Updated for v0.4.1)
           
           ```bash
           git-pm install [--no-gitignore]    # Install packages with dependency resolution
           git-pm clean                        # Remove all installed packages
-          git-pm remove <pkg> [-y]            # Remove specific package (NEW!)
-          git-pm add <n> <repo> [opts]  # Add package to manifest
+          git-pm remove <pkg> [-y]            # Remove specific package
+          git-pm config [options]             # Manage configuration (NEW!)
+          git-pm add <n> <repo> [opts]        # Add package to manifest
           ```
           
           ### Example Usage
           
           ```bash
+          # Configure packages directory
+          git-pm config packages_dir ".deps"
+          
           # Add a package (JSON format)
           git-pm add utils github.com/company/monorepo \
             --path packages/utils \
@@ -288,6 +322,9 @@ jobs:
           
           # Install with automatic dependency resolution
           git-pm install
+          
+          # List configuration
+          git-pm config --list
           
           # Remove a specific package
           git-pm remove utils -y
@@ -325,7 +362,8 @@ jobs:
           
           ✅ **Dependency Resolution** - Automatic recursive discovery  
           ✅ **Explicit Versioning** - Tags, branches, or commits  
-          ✅ **Package Removal** - Smart cascade with preservation (NEW!)  
+          ✅ **Configuration Management** - CLI config with precedence (NEW!)  
+          ✅ **Package Removal** - Smart cascade with preservation  
           ✅ **Local Overrides** - Fast development with `git-pm.local`  
           ✅ **Smart Caching** - Fast repeated installs  
           ✅ **Cross-Platform** - Linux, macOS, Windows  
@@ -379,16 +417,18 @@ jobs:
           }
           ```
           
-          ## 🔄 Previous Release (v0.2.9)
+          ## 🔄 Previous Release (v0.3.0)
           
-          v0.2.9 removed the lockfile system and simplified git-pm:
-          - Removed lockfile system (git-pm.lock)
-          - Removed `git-pm update` command
-          - Removed `--force-fresh` and `--no-resolve-deps` flags
-          - 23.8% smaller codebase
-          - Use commit refs for reproducibility instead of lockfile
+          v0.3.0 added the remove command with intelligent dependency management:
+          - **`remove` command** - Smart cascade removal
+          - Deep recursion analysis (3+ levels)
+          - Preserves shared dependencies
+          - Multi-path detection
+          - Dual manifest support (git-pm.json + git-pm.local)
+          - Environment file cleanup
+          - Preview before removal
+          - Safe by design (no --force flag)
           
-          ## 🙏 Feedback
           ## 🙏 Feedback
           
           Please report issues at: [${{ env.REPO_FULL }}/issues](${{ env.REPO_URL }}/issues)
@@ -398,6 +438,9 @@ jobs:
           **Released by:** @${{ github.actor }}  
           **Commit:** [${{ github.sha }}](${{ env.REPO_URL }}/commit/${{ github.sha }})
           NOTES_EOF
+          
+          # Replace the date placeholder with actual date
+          sed -i "s/RELEASE_DATE_PLACEHOLDER/$RELEASE_DATE/g" release_notes.md
           
           echo "Release notes generated:"
           cat release_notes.md
