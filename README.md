@@ -338,10 +338,9 @@ Create `git-pm.local` for local development:
 
 ```json
 {
-  "overrides": {
+  "packages": {
     "utils": {
-      "type": "local",
-      "path": "../local-dev/utils"
+      "repo": "../local-dev/utils"
     }
   }
 }
@@ -362,10 +361,9 @@ git-pm install
 # 2. Create local override for development
 cat > git-pm.local << EOF
 {
-  "overrides": {
+  "packages": {
     "utils": {
-      "type": "local",
-      "path": "../utils-dev"
+      "repo": "../utils-dev"
     }
   }
 }
@@ -741,7 +739,6 @@ git-pm automatically manages `.gitignore` entries on every install:
 .git-packages/
 .git-pm.env
 git-pm.local
-git-pm.lock
 ```
 
 **Installation output:**
@@ -751,7 +748,6 @@ $ git-pm install
   ✓ Added: .git-packages/
   ✓ Added: .git-pm.env
   ✓ Added: git-pm.local
-  ✓ Added: git-pm.lock
 ```
 
 **Skip automatic management:**
@@ -763,7 +759,6 @@ git-pm install --no-gitignore
 - `.git-packages/` - Installed dependencies (like node_modules)
 - `.git-pm.env` - Absolute paths (unique per developer)
 - `git-pm.local` - Local overrides (machine-specific)
-- `git-pm.lock` - Optional (commit for apps, ignore for libraries)
 
 ### Local Development with Overrides
 
@@ -788,10 +783,9 @@ Create `git-pm.local` to override packages with local paths during development:
 **git-pm.local:**
 ```json
 {
-  "overrides": {
+  "packages": {
     "my-package": {
-      "type": "local",
-      "path": "../local-dev/my-package"
+      "repo": "../local-dev/my-package"
     }
   }
 }
