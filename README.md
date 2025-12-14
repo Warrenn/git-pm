@@ -174,7 +174,6 @@ Features:
 - Automatically discovers nested dependencies
 - Resolves branches to latest commits
 - Installs in correct order (dependencies first)
-- Creates detailed lockfile with full dependency tree
 - Manages .gitignore entries automatically (use `--no-gitignore` to skip)
 
 ### Removing Packages
@@ -201,7 +200,6 @@ git-pm clean
 
 Removes:
 - All installed packages (`.git-packages/`)
-- Lockfile (`git-pm.lock`)
 
 ## Dependency Resolution
 
@@ -299,7 +297,6 @@ $ git-pm install
     ✓ Copied: packages/http -> .git-packages/http
 📦 Installing api-client...
     ✓ Copied: packages/api -> .git-packages/api
-💾 Saving lockfile...
 ✅ Installation complete! (3/3 packages)
 ```
 
@@ -310,8 +307,6 @@ $ git-pm install
 When a branch is referenced:
 1. Resolve branch to latest commit SHA
 2. All packages referencing that branch use the same resolved commit
-3. Cached in lockfile for deterministic reinstalls
-4. To update to latest, reinstall or modify the lockfile
 
 **Example:**
 ```json
@@ -522,44 +517,6 @@ sys.path.insert(0, '.git-packages')
 
 from common_utils import helpers
 from validators import email
-```
-
-## Lockfile Format
-
-`git-pm.lock` (JSON):
-
-```json
-{
-  "packages": {
-    "logger": {
-      "repo": "github.com/company/monorepo",
-      "path": "packages/logger",
-      "ref": {
-        "type": "commit",
-        "value": "abc12345"
-      },
-      "original_ref": {
-        "type": "branch",
-        "value": "main"
-      },
-      "commit": "abc12345",
-      "dependencies": [],
-      "installed_at": "2024-01-15T10:30:00"
-    },
-    "utils": {
-      "repo": "github.com/company/monorepo",
-      "path": "packages/utils",
-      "ref": {
-        "type": "tag",
-        "value": "v2.0.0"
-      },
-      "commit": "def67890",
-      "dependencies": ["logger"],
-      "installed_at": "2024-01-15T10:30:01"
-    }
-  },
-  "installation_order": ["logger", "utils"]
-}
 ```
 
 ## Troubleshooting
