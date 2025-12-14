@@ -19,6 +19,30 @@ echo "============================================"
 echo "Test location: $TEST_DIR"
 echo ""
 
+# Find git-pm.py BEFORE changing directories
+# Try multiple locations for flexibility
+GIT_PM_PATH=""
+
+if [ -f "$SCRIPT_DIR/../git-pm.py" ]; then
+    # Script is in tests/ subdirectory, git-pm.py is in parent (typical)
+    GIT_PM_PATH="$SCRIPT_DIR/../git-pm.py"
+elif [ -f "$SCRIPT_DIR/git-pm.py" ]; then
+    # Script is in same directory as git-pm.py
+    GIT_PM_PATH="$SCRIPT_DIR/git-pm.py"
+elif [ -f "git-pm.py" ]; then
+    # git-pm.py is in current directory
+    GIT_PM_PATH="$(pwd)/git-pm.py"
+else
+    echo "Error: Cannot find git-pm.py"
+    echo "Searched in:"
+    echo "  - $SCRIPT_DIR/../git-pm.py"
+    echo "  - $SCRIPT_DIR/git-pm.py"
+    echo "  - $(pwd)/git-pm.py"
+    exit 1
+fi
+
+echo "✓ Found git-pm.py at: $GIT_PM_PATH"
+
 # Backup existing user config if it exists
 if [ -f ~/.git-pm/config ]; then
     cp ~/.git-pm/config ~/.git-pm/config.test-backup
@@ -32,8 +56,8 @@ rm -f ~/.git-pm/config
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
-# Copy git-pm.py
-cp "$SCRIPT_DIR/git-pm.py" .
+# Copy git-pm.py using the absolute path we found earlier
+cp "$GIT_PM_PATH" .
 
 # Initialize a minimal git-pm project
 cat > git-pm.json << 'EOF'
