@@ -57,7 +57,7 @@
               "additionalProperties": false
             }
           },
-          "required": ["repo", "path", "ref"],
+          "required": ["repo"],
           "additionalProperties": false
         }
       },
