@@ -3,7 +3,7 @@
 git-pm: Git Package Manager
 A package manager that uses git sparse-checkout to manage dependencies with full dependency resolution.
 
-Version 0.4.1 - Full dependency resolution with explicit versions
+Version 0.4.3 - Full dependency resolution with explicit versions
 Requires Python 3.8+ (3.7 may work but is not tested)
 """
 
@@ -27,7 +27,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.4.1"
+__version__ = "0.4.3"
 
 
 class GitPM:
@@ -266,84 +266,84 @@ class GitPM:
                 return "https://{}@dev.azure.com/{}/{}/_git/{}".format(token, org, project_encoded, repo)
             return "https://dev.azure.com/{}/{}/_git/{}".format(org, project_encoded, repo)
 
-    def normalize_repo_url(self, repo):
-        """Convert repository identifier to full URL"""
-        repo = repo.strip()
+def normalize_repo_url(self, repo):
+    """Convert repository identifier to full URL"""
+    repo = repo.strip()
+    
+    # Already a file:// URL
+    if repo.startswith("file://"):
+        path = repo[7:]  # Remove "file://"
+        if not os.path.isabs(path):
+            # Make relative paths absolute relative to project root
+            path = str((self.project_root / path).resolve())
+        return "file://{}".format(path)
+    
+    # Check if it looks like a local path (starts with ./ ../ / ~)
+    if repo.startswith(("./", "../", "/", "~/")):
+        if repo.startswith("~/"):
+            path = os.path.expanduser(repo)
+        elif os.path.isabs(repo):
+            path = repo
+        else:
+            # Relative path - resolve relative to project root
+            path = str((self.project_root / repo).resolve())
+        return "file://{}".format(path)
+    
+    # Check if this is an Azure DevOps URL (any format)
+    ado_parts = self._parse_azure_devops_url(repo)
+    if ado_parts:
+        org, project, repo_name = ado_parts
         
-        # Already a file:// URL
-        if repo.startswith("file://"):
-            path = repo[7:]  # Remove "file://"
-            if not os.path.isabs(path):
-                # Make relative paths absolute relative to project root
-                path = str((self.project_root / path).resolve())
-            return "file://{}".format(path)
+        # Determine protocol preference (default to ssh for backward compatibility)
+        protocol = 'ssh'
+        if "git_protocol" in self.config and "dev.azure.com" in self.config["git_protocol"]:
+            protocol = self.config["git_protocol"]["dev.azure.com"]
         
-        # Check if it looks like a local path (starts with ./ ../ / ~)
-        if repo.startswith(("./", "../", "/", "~/")):
-            if repo.startswith("~/"):
-                path = os.path.expanduser(repo)
-            elif os.path.isabs(repo):
-                path = repo
-            else:
-                # Relative path - resolve relative to project root
-                path = str((self.project_root / repo).resolve())
-            return "file://{}".format(path)
-        
-        # Check if this is an Azure DevOps URL (any format)
-        ado_parts = self._parse_azure_devops_url(repo)
-        if ado_parts:
-            org, project, repo_name = ado_parts
-            
-            # Determine protocol preference (default to ssh for backward compatibility)
-            protocol = 'ssh'
-            if "git_protocol" in self.config and "dev.azure.com" in self.config["git_protocol"]:
-                protocol = self.config["git_protocol"]["dev.azure.com"]
-            
-            # Check for PAT - if present, always use HTTPS
-            token = self.config.get("azure_devops_pat") or os.getenv("GIT_PM_TOKEN_dev_azure_com")
-            if token:
-                protocol = 'https'
-            
-            return self._build_azure_devops_url(org, project, repo_name, protocol, token)
-        
-        # Already a full URL (http/https/git@) - pass through for non-Azure DevOps
-        if repo.startswith(("http://", "https://", "git@")):
-            return repo
-        
-        if "/" not in repo:
-            return repo
-        
-        canonical_repo = repo
-        domain = canonical_repo.split("/")[0]
-        path = "/".join(canonical_repo.split("/")[1:])
-        
-        # Check user config for URL patterns
-        if "url_patterns" in self.config and domain in self.config["url_patterns"]:
-            pattern = self.config["url_patterns"][domain]
-            return pattern.format(path=path)
-        
-        # Check git protocol preference
-        protocol = "ssh"
-        if "git_protocol" in self.config and domain in self.config["git_protocol"]:
-            protocol = self.config["git_protocol"][domain]
-        
-        # Try to detect SSH availability
-        if protocol == "ssh" or self._can_use_ssh(domain):
-            if "github.com" in domain or "gitlab.com" in domain:
-                return "git@{}:{}.git".format(domain, path)
-        
-        # Check for generic token in environment
-        env_token_key = "GIT_PM_TOKEN_{}".format(domain.replace(".", "_"))
-        token = os.getenv(env_token_key)
-        
+        # Check for PAT - if present, always use HTTPS
+        token = self.config.get("azure_devops_pat") or os.getenv("GIT_PM_TOKEN_dev_azure_com")
         if token:
-            if "github.com" in domain:
-                return "https://{}@github.com/{}.git".format(token, path)
-            else:
-                return "https://oauth2:{}@{}/{}.git".format(token, domain, path)
+            protocol = 'https'
         
-        # Fallback to HTTPS
-        return "https://{}/{}.git".format(domain, path)
+        return self._build_azure_devops_url(org, project, repo_name, protocol, token)
+    
+    # Already a full URL (http/https/git@) - pass through for non-Azure DevOps
+    if repo.startswith(("http://", "https://", "git@")):
+        return repo
+    
+    if "/" not in repo:
+        return repo
+    
+    canonical_repo = repo
+    domain = canonical_repo.split("/")[0]
+    path = "/".join(canonical_repo.split("/")[1:])
+    
+    # Check user config for URL patterns
+    if "url_patterns" in self.config and domain in self.config["url_patterns"]:
+        pattern = self.config["url_patterns"][domain]
+        return pattern.format(path=path)
+    
+    # Check git protocol preference
+    protocol = "ssh"
+    if "git_protocol" in self.config and domain in self.config["git_protocol"]:
+        protocol = self.config["git_protocol"][domain]
+    
+    # Try to detect SSH availability
+    if protocol == "ssh" or self._can_use_ssh(domain):
+        if "github.com" in domain or "gitlab.com" in domain:
+            return "git@{}:{}.git".format(domain, path)
+    
+    # Check for generic token in environment
+    env_token_key = "GIT_PM_TOKEN_{}".format(domain.replace(".", "_"))
+    token = os.getenv(env_token_key)
+    
+    if token:
+        if "github.com" in domain:
+            return "https://{}@github.com/{}.git".format(token, path)
+        else:
+            return "https://oauth2:{}@{}/{}.git".format(token, domain, path)
+    
+    # Fallback to HTTPS
+    return "https://{}/{}.git".format(domain, path)
 
     
     def _can_use_ssh(self, domain):
