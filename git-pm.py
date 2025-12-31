@@ -3,7 +3,7 @@
 git-pm: Git Package Manager
 A package manager that uses git sparse-checkout to manage dependencies with full dependency resolution.
 
-Version 0.4.4 - Full dependency resolution with explicit versions
+Version 0.4.5 - Full dependency resolution with explicit versions
 Requires Python 3.8+ (3.7 may work but is not tested)
 """
 
@@ -27,7 +27,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 
 
 class GitPM:
@@ -204,6 +204,7 @@ class GitPM:
         - git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
         - dev.azure.com/{org}/{project}/_git/{repo}
         - dev.azure.com/{org}/{project}/{repo}
+        - dev.azure.com:v3/{org}/{project}/{repo}  (malformed but common)
         
         Returns: (org, project, repo) tuple or None if not an Azure DevOps URL
         """
@@ -219,19 +220,26 @@ class GitPM:
             # SSH URLs may have URL-encoded project names, decode them for consistency
             return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
         
-        # Pattern 2: HTTPS format - https://[user@]dev.azure.com/{org}/{project}/_git/{repo}
+        # Pattern 2: Malformed hybrid - dev.azure.com:v3/{org}/{project}/{repo}
+        # This is a common mistake mixing HTTPS domain with SSH path style
+        hybrid_match = re.match(r'^dev\.azure\.com:v3/([^/]+)/([^/]+)/(.+)$', repo)
+        if hybrid_match:
+            org, project, repo_name = hybrid_match.groups()
+            return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
+        
+        # Pattern 3: HTTPS format - https://[user@]dev.azure.com/{org}/{project}/_git/{repo}
         https_match = re.match(r'^https://(?:[^@]+@)?dev\.azure\.com/([^/]+)/([^/]+)/_git/(.+)$', repo)
         if https_match:
             org, project, repo_name = https_match.groups()
             return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
         
-        # Pattern 3: Shorthand with /_git/ - dev.azure.com/{org}/{project}/_git/{repo}
+        # Pattern 4: Shorthand with /_git/ - dev.azure.com/{org}/{project}/_git/{repo}
         shorthand_git_match = re.match(r'^dev\.azure\.com/([^/]+)/([^/]+)/_git/(.+)$', repo)
         if shorthand_git_match:
             org, project, repo_name = shorthand_git_match.groups()
             return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
         
-        # Pattern 4: Shorthand without /_git/ - dev.azure.com/{org}/{project}/{repo}
+        # Pattern 5: Shorthand without /_git/ - dev.azure.com/{org}/{project}/{repo}
         shorthand_match = re.match(r'^dev\.azure\.com/([^/]+)/([^/]+)/([^/]+)$', repo)
         if shorthand_match:
             org, project, repo_name = shorthand_match.groups()
