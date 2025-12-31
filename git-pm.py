@@ -11,8 +11,8 @@ import argparse
 import hashlib
 import json
 import os
-import platform
 import re
+import urllib.parse
 import shutil
 import subprocess
 import sys
@@ -195,6 +195,77 @@ class GitPM:
         """Check if a repository URL is a local file path"""
         return repo_url.startswith("file://")
     
+    def _parse_azure_devops_url(self, repo):
+        """
+        Parse any Azure DevOps URL format and extract org, project, repo.
+        
+        Supported formats:
+        - https://[user@]dev.azure.com/{org}/{project}/_git/{repo}
+        - git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+        - dev.azure.com/{org}/{project}/_git/{repo}
+        - dev.azure.com/{org}/{project}/{repo}
+        
+        Returns: (org, project, repo) tuple or None if not an Azure DevOps URL
+        """
+        # Normalize: remove .git suffix if present
+        repo = repo.rstrip('/')
+        if repo.endswith('.git'):
+            repo = repo[:-4]
+        
+        # Pattern 1: SSH format - git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+        ssh_match = re.match(r'^git@ssh\.dev\.azure\.com:v3/([^/]+)/([^/]+)/(.+)$', repo)
+        if ssh_match:
+            org, project, repo_name = ssh_match.groups()
+            # SSH URLs may have URL-encoded project names, decode them for consistency
+            return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
+        
+        # Pattern 2: HTTPS format - https://[user@]dev.azure.com/{org}/{project}/_git/{repo}
+        https_match = re.match(r'^https://(?:[^@]+@)?dev\.azure\.com/([^/]+)/([^/]+)/_git/(.+)$', repo)
+        if https_match:
+            org, project, repo_name = https_match.groups()
+            return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
+        
+        # Pattern 3: Shorthand with /_git/ - dev.azure.com/{org}/{project}/_git/{repo}
+        shorthand_git_match = re.match(r'^dev\.azure\.com/([^/]+)/([^/]+)/_git/(.+)$', repo)
+        if shorthand_git_match:
+            org, project, repo_name = shorthand_git_match.groups()
+            return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
+        
+        # Pattern 4: Shorthand without /_git/ - dev.azure.com/{org}/{project}/{repo}
+        shorthand_match = re.match(r'^dev\.azure\.com/([^/]+)/([^/]+)/([^/]+)$', repo)
+        if shorthand_match:
+            org, project, repo_name = shorthand_match.groups()
+            return (urllib.parse.unquote(org), urllib.parse.unquote(project), urllib.parse.unquote(repo_name))
+        
+        return None
+
+
+    # ============================================================================
+    # NEW METHOD: Add this to the GitPM class (after _parse_azure_devops_url)
+    # ============================================================================
+
+    def _build_azure_devops_url(self, org, project, repo, protocol='https', token=None):
+        """
+        Build Azure DevOps URL in the specified protocol.
+        
+        Args:
+            org: Organization name
+            project: Project name  
+            repo: Repository name
+            protocol: 'https' or 'ssh'
+            token: Optional PAT for HTTPS authentication
+        
+        Returns: Full URL string
+        """
+        if protocol == 'ssh':
+            return "git@ssh.dev.azure.com:v3/{}/{}/{}".format(org, project, repo)
+        else:
+            # HTTPS format - URL encode project name for spaces
+            project_encoded = urllib.parse.quote(project, safe='')
+            if token:
+                return "https://{}@dev.azure.com/{}/{}/_git/{}".format(token, org, project_encoded, repo)
+            return "https://dev.azure.com/{}/{}/_git/{}".format(org, project_encoded, repo)
+
     def normalize_repo_url(self, repo):
         """Convert repository identifier to full URL"""
         repo = repo.strip()
@@ -218,7 +289,24 @@ class GitPM:
                 path = str((self.project_root / repo).resolve())
             return "file://{}".format(path)
         
-        # Already a full URL (http/https/git@)
+        # Check if this is an Azure DevOps URL (any format)
+        ado_parts = self._parse_azure_devops_url(repo)
+        if ado_parts:
+            org, project, repo_name = ado_parts
+            
+            # Determine protocol preference (default to ssh for backward compatibility)
+            protocol = 'ssh'
+            if "git_protocol" in self.config and "dev.azure.com" in self.config["git_protocol"]:
+                protocol = self.config["git_protocol"]["dev.azure.com"]
+            
+            # Check for PAT - if present, always use HTTPS
+            token = self.config.get("azure_devops_pat") or os.getenv("GIT_PM_TOKEN_dev_azure_com")
+            if token:
+                protocol = 'https'
+            
+            return self._build_azure_devops_url(org, project, repo_name, protocol, token)
+        
+        # Already a full URL (http/https/git@) - pass through for non-Azure DevOps
         if repo.startswith(("http://", "https://", "git@")):
             return repo
         
@@ -228,23 +316,6 @@ class GitPM:
         canonical_repo = repo
         domain = canonical_repo.split("/")[0]
         path = "/".join(canonical_repo.split("/")[1:])
-        
-        # Check for Azure DevOps PAT from environment
-        if self.config.get("azure_devops_pat") and ("dev.azure.com" in domain or "visualstudio.com" in domain):
-            token = self.config["azure_devops_pat"]
-            return "https://{}@{}/{}.git".format(token, domain, path)
-        
-        # Check for generic token in environment
-        env_token_key = "GIT_PM_TOKEN_{}".format(domain.replace(".", "_"))
-        token = os.getenv(env_token_key)
-        
-        if token:
-            if "github.com" in domain:
-                return "https://{}@github.com/{}.git".format(token, path)
-            elif "dev.azure.com" in domain or "visualstudio.com" in domain:
-                return "https://{}@{}/{}.git".format(token, domain, path)
-            else:
-                return "https://oauth2:{}@{}/{}.git".format(token, domain, path)
         
         # Check user config for URL patterns
         if "url_patterns" in self.config and domain in self.config["url_patterns"]:
@@ -260,16 +331,20 @@ class GitPM:
         if protocol == "ssh" or self._can_use_ssh(domain):
             if "github.com" in domain or "gitlab.com" in domain:
                 return "git@{}:{}.git".format(domain, path)
-            elif "dev.azure.com" in domain:
-                return "git@ssh.dev.azure.com:v3/{}".format(path)
-            elif "visualstudio.com" in domain:
-                parts = path.split("/")
-                if len(parts) >= 2:
-                    org = parts[0]
-                    return "git@vs-ssh.visualstudio.com:v3/{}/{}".format(org, "/".join(parts[1:]))
+        
+        # Check for generic token in environment
+        env_token_key = "GIT_PM_TOKEN_{}".format(domain.replace(".", "_"))
+        token = os.getenv(env_token_key)
+        
+        if token:
+            if "github.com" in domain:
+                return "https://{}@github.com/{}.git".format(token, path)
+            else:
+                return "https://oauth2:{}@{}/{}.git".format(token, domain, path)
         
         # Fallback to HTTPS
         return "https://{}/{}.git".format(domain, path)
+
     
     def _can_use_ssh(self, domain):
         """Test if SSH works for this domain"""
