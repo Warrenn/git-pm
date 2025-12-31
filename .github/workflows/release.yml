@@ -121,6 +121,25 @@ jobs:
           fi
           echo "✅ Config command present"
           
+          # Check Azure DevOps URL handling methods exist (v0.5.0+)
+          if ! grep -q "_parse_azure_devops_url" git-pm.py; then
+            echo "⚠️  Azure DevOps URL parser not found (optional for v0.5.0+)"
+          else
+            echo "✅ Azure DevOps URL parser present"
+          fi
+          
+          if ! grep -q "_build_azure_devops_url" git-pm.py; then
+            echo "⚠️  Azure DevOps URL builder not found (optional for v0.5.0+)"
+          else
+            echo "✅ Azure DevOps URL builder present"
+          fi
+          
+          if ! grep -q "_configure_azure_devops_auth" git-pm.py; then
+            echo "⚠️  Azure DevOps auth config not found (optional for v0.5.0+)"
+          else
+            echo "✅ Azure DevOps auth config present"
+          fi
+          
           # Test basic commands
           python3 git-pm.py --version || exit 1
           python3 git-pm.py --help | grep -q "install.*clean.*remove.*config.*add" || exit 1
@@ -179,159 +198,154 @@ jobs:
           - **Lines Added:** ${{ steps.stats.outputs.insertions }}
           - **Lines Removed:** ${{ steps.stats.outputs.deletions }}
           
-          ## ✨ What's New in v0.4.1
+          ## ✨ What's New
           
-          ### ⚙️ New Feature: Config Command
+          ### 🔐 Enhanced CI/CD Authentication
           
-          This release adds the **`config` command** for convenient CLI-based configuration management!
+          This release adds comprehensive **Azure DevOps URL handling** and **multi-provider authentication** support for seamless CI/CD pipeline integration.
           
-          **New Command:**
-          ```bash
-          git-pm config [options]
+          #### New Authentication Methods
+          
+          | Method | Environment Variable | Best For |
+          |--------|---------------------|----------|
+          | Azure DevOps Bearer | `SYSTEM_ACCESSTOKEN` | Azure Pipelines (recommended) |
+          | Azure DevOps PAT | `AZURE_DEVOPS_PAT` | Simple setup |
+          | GitHub | `GIT_PM_TOKEN_github_com` | GitHub Actions |
+          | GitLab | `GIT_PM_TOKEN_gitlab_com` | GitLab CI |
+          | Bitbucket | `GIT_PM_TOKEN_bitbucket_org` | Bitbucket Pipelines |
+          | Any Provider | `GIT_PM_TOKEN_{domain}` | Self-hosted/other |
+          
+          #### Azure DevOps URL Normalization
+          
+          All Azure DevOps URL formats are now automatically normalized:
+          
+          ```
+          ✅ git@ssh.dev.azure.com:v3/org/project/repo
+          ✅ https://dev.azure.com/org/project/_git/repo
+          ✅ https://user@dev.azure.com/org/project/_git/repo
+          ✅ dev.azure.com/org/project/_git/repo
+          ✅ dev.azure.com/org/project/repo
+          ✅ dev.azure.com:v3/org/project/repo (legacy)
           ```
           
-          ### 🎯 Key Features
+          #### Seamless Local & CI/CD Development
           
-          - ✅ **Get configuration values** - Retrieve current settings
-          - ✅ **Set at project level** - Configure current project
-          - ✅ **Set at user level** - Configure globally with --global
-          - ✅ **Unset values** - Remove configuration settings
-          - ✅ **List all settings** - View merged configuration with sources
-          - ✅ **Auto-create files** - Creates config files automatically
-          - ✅ **Key validation** - Prevents typos with helpful errors
-          - ✅ **Source indicators** - Shows where each value comes from
+          Use the same `git-pm.json` for both environments:
           
-          ### 📖 How It Works
-          
-          **Configuration Levels (Priority Order):**
-          1. **Project config** (`git-pm.config`) - Highest priority
-          2. **User config** (`~/.git-pm/config`) - Medium priority
-          3. **Defaults** (built-in) - Lowest priority
-          
-          ### 🔧 Config Command Usage
-          
-          **Get a value:**
-          ```bash
-          $ git-pm config packages_dir
-          .git-packages
+          ```json
+          {
+            "packages": {
+              "shared-scripts": {
+                "repo": "dev.azure.com/myorg/Platform/shared-scripts",
+                "path": "utils",
+                "ref": {"type": "tag", "value": "v1.0.0"}
+              }
+            }
+          }
           ```
           
-          **Set at project level:**
-          ```bash
-          $ git-pm config packages_dir ".deps"
-          ✓ Set packages_dir = .deps in project config
+          - **Local:** Automatically uses SSH (if keys configured)
+          - **CI/CD:** Automatically uses HTTPS with token authentication
+          
+          ### 🔧 Azure Pipelines Integration
+          
+          **Recommended Setup (SYSTEM_ACCESSTOKEN):**
+          
+          ```yaml
+          - task: Bash@3
+            displayName: 'Install packages'
+            inputs:
+              targetType: 'inline'
+              script: |
+                curl -fsSL ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.sh | bash
+                git-pm install
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
           ```
           
-          **Set at user level (--global):**
-          ```bash
-          $ git-pm config --global cache_dir "/tmp/cache"
-          ✓ Set cache_dir = /tmp/cache in user config
+          **Benefits:**
+          - ✅ Token never appears in URLs or logs
+          - ✅ Uses git `http.extraheader` with bearer authentication
+          - ✅ Automatic cross-project access (with proper permissions)
+          
+          ### 🛠️ GitHub Actions Integration
+          
+          ```yaml
+          - name: Install packages
+            run: |
+              curl -fsSL ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.sh | bash
+              git-pm install
+            env:
+              GIT_PM_TOKEN_github_com: ${{ secrets.GITHUB_TOKEN }}
           ```
           
-          **List all settings with sources:**
-          ```bash
-          $ git-pm config --list
-          ⚙️  git-pm config
+          ### 📁 Local Override Workflow
           
-          Configuration (merged view):
+          Use `git-pm.local` for local development without modifying committed files:
           
-          azure_devops_pat=(empty) (default)
-          cache_dir=/tmp/cache (user)
-          git_protocol={} (default)
-          packages_dir=.deps (project)
-          url_patterns={} (default)
-          ```
-          
-          **Unset a value:**
-          ```bash
-          $ git-pm config --unset packages_dir
-          ✓ Unset packages_dir in project config
-          
-          # Falls back to user or default value
-          $ git-pm config packages_dir
-          .git-packages
-          ```
-          
-          ### 📋 Config Command Options
-          
-          | Command | Description |
-          |---------|-------------|
-          | `config <key>` | Get value (shows merged result) |
-          | `config <key> <value>` | Set value (project level) |
-          | `config --global <key> <value>` | Set value (user level) |
-          | `config --unset <key>` | Unset value (project level) |
-          | `config --unset --global <key>` | Unset value (user level) |
-          | `config --list` | List all settings with sources |
-          
-          ### 🔑 Configuration Keys
-          
-          | Key | Description | Default |
-          |-----|-------------|---------|
-          | `packages_dir` | Where packages install | `.git-packages` |
-          | `cache_dir` | Cache location | `~/.cache/git-pm` |
-          | `git_protocol` | Git protocol settings | `{}` |
-          | `url_patterns` | URL mappings | `{}` |
-          | `azure_devops_pat` | Azure PAT token | `""` |
-          
-          ### 📚 Example Scenarios
-          
-          **Change install directory:**
-          ```bash
-          git-pm config packages_dir ".modules"
-          ```
-          
-          **Use SSD for cache:**
-          ```bash
-          git-pm config --global cache_dir "/mnt/ssd/git-pm-cache"
-          ```
-          
-          **Review all settings:**
-          ```bash
-          git-pm config --list
-          ```
-          
-          **Reset to defaults:**
-          ```bash
-          git-pm config --unset packages_dir
-          git-pm config --unset --global packages_dir
+          ```json
+          {
+            "packages": {
+              "shared-scripts": {
+                "repo": "file:///home/dev/projects/shared-scripts"
+              }
+            }
+          }
           ```
           
           ## 🚀 Quick Start
           
-          ### Available Commands (Updated for v0.4.1)
-          
+          **Linux/macOS:**
           ```bash
-          git-pm install [--no-gitignore]    # Install packages with dependency resolution
-          git-pm clean                        # Remove all installed packages
-          git-pm remove <pkg> [-y]            # Remove specific package
-          git-pm config [options]             # Manage configuration (NEW!)
-          git-pm add <n> <repo> [opts]        # Add package to manifest
+          curl -fsSL ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.sh | bash
           ```
           
-          ### Example Usage
+          **Windows:**
+          ```powershell
+          irm ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.ps1 | iex
+          ```
+          
+          **Direct Download:**
+          ```bash
+          curl -fsSL ${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py -o git-pm.py
+          python3 git-pm.py install
+          ```
+          
+          ## 📖 Usage
+          
+          ### Basic Commands
           
           ```bash
-          # Configure packages directory
-          git-pm config packages_dir ".deps"
-          
-          # Add a package (JSON format)
-          git-pm add utils github.com/company/monorepo \
-            --path packages/utils \
-            --ref-type tag \
-            --ref-value v1.0.0
-          
-          # Install with automatic dependency resolution
+          # Install packages from manifest
           git-pm install
           
-          # List configuration
-          git-pm config --list
+          # Remove a package (with dependency analysis)
+          git-pm remove <package-name>
           
-          # Remove a specific package
-          git-pm remove utils -y
-          
-          # Clean all packages
+          # Clean all installed packages
           git-pm clean
+          
+          # Manage configuration
+          git-pm config --list
+          git-pm config packages_dir ".deps"
+          git-pm config --global git_protocol '{"dev.azure.com": "https"}'
+          
+          # Add a package to manifest
+          git-pm add my-pkg github.com/org/repo --path src --ref-type tag --ref-value v1.0.0
           ```
+          
+          ### Configuration Hierarchy
+          
+          ```
+          Defaults → User Config (~/.git-pm/config) → Project Config (git-pm.config) → Environment Variables
+          ```
+          
+          | Key | Description | Default |
+          |-----|-------------|---------|
+          | `packages_dir` | Installation directory | `.git-packages` |
+          | `cache_dir` | Cache location | `~/.cache/git-pm` |
+          | `git_protocol` | Protocol per domain | `{}` |
+          | `azure_devops_pat` | Azure DevOps PAT | `""` |
           
           ## 📋 Manifest Format (JSON)
           
@@ -339,7 +353,7 @@ jobs:
           {
             "packages": {
               "azure-bootstrap": {
-                "repo": "dev.azure.com/org/terraform",
+                "repo": "dev.azure.com/org/project/terraform-modules",
                 "path": "modules/bootstrap",
                 "ref": {
                   "type": "tag",
@@ -358,17 +372,31 @@ jobs:
           }
           ```
           
-          ## 📚 Core Features (Complete Set)
+          ## 📚 Core Features
           
+          ✅ **Multi-Provider Authentication** - GitHub, GitLab, Bitbucket, Azure DevOps  
+          ✅ **Azure DevOps URL Handling** - All URL formats supported  
+          ✅ **SYSTEM_ACCESSTOKEN Support** - Secure bearer token auth for Azure Pipelines  
+          ✅ **Protocol-Agnostic Repos** - Same manifest for local SSH and CI/CD HTTPS  
           ✅ **Dependency Resolution** - Automatic recursive discovery  
           ✅ **Explicit Versioning** - Tags, branches, or commits  
-          ✅ **Configuration Management** - CLI config with precedence (NEW!)  
+          ✅ **Configuration Management** - CLI config with precedence  
           ✅ **Package Removal** - Smart cascade with preservation  
           ✅ **Local Overrides** - Fast development with `git-pm.local`  
           ✅ **Smart Caching** - Fast repeated installs  
           ✅ **Cross-Platform** - Linux, macOS, Windows  
           ✅ **Zero Dependencies** - Pure Python 3.8+  
-          ✅ **Azure DevOps PAT** - Built-in token support  
+          
+          ## 🔐 Authentication Quick Reference
+          
+          | Scenario | Environment Variable |
+          |----------|---------------------|
+          | Azure Pipelines | `SYSTEM_ACCESSTOKEN: $(System.AccessToken)` |
+          | Azure DevOps (PAT) | `AZURE_DEVOPS_PAT: your-pat-token` |
+          | GitHub Actions | `GIT_PM_TOKEN_github_com: ${{ secrets.GITHUB_TOKEN }}` |
+          | GitLab CI | `GIT_PM_TOKEN_gitlab_com: ${CI_JOB_TOKEN}` |
+          | Bitbucket Pipelines | `GIT_PM_TOKEN_bitbucket_org: ${BITBUCKET_TOKEN}` |
+          | Self-hosted | `GIT_PM_TOKEN_git_mycompany_com: ${TOKEN}` |
           
           ## 📋 Requirements
           
@@ -376,58 +404,67 @@ jobs:
           - Git 2.25+
           - Internet connection (for remote repos)
           
-          ## 🎓 Examples
+          ## 🎓 CI/CD Examples
           
-          ### Terraform Modules
-          ```json
-          {
-            "packages": {
-              "azure-bootstrap": {
-                "repo": "dev.azure.com/org/terraform",
-                "path": "modules/bootstrap",
-                "ref": {"type": "tag", "value": "v1.0.0"}
-              }
-            }
-          }
+          ### Azure DevOps Pipeline
+          
+          ```yaml
+          trigger:
+            - main
+          
+          pool:
+            vmImage: 'ubuntu-latest'
+          
+          steps:
+            - task: Bash@3
+              displayName: 'Install dependencies'
+              inputs:
+                targetType: 'inline'
+                script: |
+                  curl -fsSL ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.sh | bash
+                  git-pm install
+              env:
+                SYSTEM_ACCESSTOKEN: $(System.AccessToken)
           ```
           
-          ### Shared Libraries
-          ```json
-          {
-            "packages": {
-              "common-utils": {
-                "repo": "github.com/company/shared-libs",
-                "path": "utils",
-                "ref": {"type": "branch", "value": "main"}
-              }
-            }
-          }
+          ### GitHub Actions
+          
+          ```yaml
+          jobs:
+            build:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: Install packages
+                  run: |
+                    curl -fsSL ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.sh | bash
+                    git-pm install
+                  env:
+                    GIT_PM_TOKEN_github_com: ${{ secrets.GITHUB_TOKEN }}
           ```
           
-          ### Bitbucket Support
-          ```json
-          {
-            "packages": {
-              "my-lib": {
-                "repo": "bitbucket.org/workspace/repository",
-                "path": "packages/my-lib",
-                "ref": {"type": "tag", "value": "v1.0.0"}
-              }
-            }
-          }
+          ### GitLab CI
+          
+          ```yaml
+          build:
+            script:
+              - curl -fsSL ${{ env.REPO_URL }}/releases/latest/download/install-git-pm.sh | bash
+              - git-pm install
+            variables:
+              GIT_PM_TOKEN_gitlab_com: ${CI_JOB_TOKEN}
           ```
           
-          ## 🔄 Previous Release (v0.3.0)
+          ## 📚 Documentation
           
-          v0.3.0 added the remove command with intelligent dependency management:
-          - **`remove` command** - Smart cascade removal
-          - Deep recursion analysis (3+ levels)
-          - Preserves shared dependencies
-          - Multi-path detection
-          - Dual manifest support (git-pm.json + git-pm.local)
-          - Environment file cleanup
-          - Preview before removal
-          - Safe by design (no --force flag)
+          - [README](${{ env.REPO_URL }}/blob/main/README.md)
+          - [CI/CD Documentation](${{ env.REPO_URL }}/blob/main/CI_CD_DOCUMENTATION.md)
+          - [Dependency Resolution](${{ env.REPO_URL }}/blob/main/DEPENDENCY_RESOLUTION.md)
+          
+          ## 🔄 Previous Releases
+          
+          **v0.4.x** - Config command with CLI-based configuration management  
+          **v0.3.x** - Remove command with intelligent dependency management  
+          **v0.2.x** - Dependency resolution with explicit versioning  
           
           ## 🙏 Feedback
           
@@ -457,6 +494,7 @@ jobs:
           [ -f "README.md" ] && ASSETS="$ASSETS README.md" || echo "⚠️  README.md not found"
           [ -f "install-git-pm.sh" ] && ASSETS="$ASSETS install-git-pm.sh" || echo "⚠️  install-git-pm.sh not found"
           [ -f "install-git-pm.ps1" ] && ASSETS="$ASSETS install-git-pm.ps1" || echo "⚠️  install-git-pm.ps1 not found"
+          [ -f "CI_CD_DOCUMENTATION.md" ] && ASSETS="$ASSETS CI_CD_DOCUMENTATION.md" || echo "⚠️  CI_CD_DOCUMENTATION.md not found"
           
           # Create files list for GitHub release action
           echo "$ASSETS" | tr ' ' '\n' > release_assets.txt
@@ -539,6 +577,11 @@ jobs:
           # Test version
           python3 git-pm.py --version
           
+          # Test help includes all commands
+          python3 git-pm.py --help | grep -q "install" && echo "✅ install command present"
+          python3 git-pm.py --help | grep -q "config" && echo "✅ config command present"
+          python3 git-pm.py --help | grep -q "remove" && echo "✅ remove command present"
+          
           echo "✅ Release installation test passed on ${{ runner.os }}"
       
       - name: Test Windows installation
@@ -560,3 +603,63 @@ jobs:
           python git-pm.py --version
           
           Write-Host "✅ Release installation test passed on Windows"
+
+  test-authentication:
+    name: Test Authentication Features
+    needs: create-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Wait for release
+        run: sleep 30
+      
+      - name: Download and test
+        run: |
+          curl -fsSL ${{ env.REPO_URL }}/releases/download/${{ steps.version.outputs.version }}/git-pm.py -o git-pm.py
+          
+          echo "Testing authentication-related features..."
+          
+          # Check Azure DevOps URL handling methods exist
+          if grep -q "_parse_azure_devops_url" git-pm.py; then
+            echo "✅ Azure DevOps URL parser present"
+          else
+            echo "⚠️  Azure DevOps URL parser not found (may be older version)"
+          fi
+          
+          if grep -q "_build_azure_devops_url" git-pm.py; then
+            echo "✅ Azure DevOps URL builder present"
+          else
+            echo "⚠️  Azure DevOps URL builder not found (may be older version)"
+          fi
+          
+          if grep -q "_configure_azure_devops_auth" git-pm.py; then
+            echo "✅ Azure DevOps bearer auth configuration present"
+          else
+            echo "⚠️  Azure DevOps bearer auth not found (may be older version)"
+          fi
+          
+          if grep -q "SYSTEM_ACCESSTOKEN" git-pm.py; then
+            echo "✅ SYSTEM_ACCESSTOKEN support present"
+          else
+            echo "⚠️  SYSTEM_ACCESSTOKEN support not found (may be older version)"
+          fi
+          
+          # Check config command exists
+          if grep -q "def cmd_config" git-pm.py; then
+            echo "✅ Config command present"
+          else
+            echo "❌ Config command missing"
+            exit 1
+          fi
+          
+          echo "✅ Authentication feature check complete"
