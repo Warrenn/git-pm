@@ -3,7 +3,7 @@
 git-pm: Git Package Manager
 A package manager that uses git sparse-checkout to manage dependencies with full dependency resolution.
 
-Version 0.4.5 - Full dependency resolution with explicit versions
+Version 0.4.6 - Full dependency resolution with explicit versions
 Requires Python 3.8+ (3.7 may work but is not tested)
 """
 
@@ -27,7 +27,7 @@ if sys.platform == 'win32':
     if sys.stderr.encoding != 'utf-8':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 
 
 class GitPM:
@@ -261,7 +261,9 @@ class GitPM:
             project: Project name  
             repo: Repository name
             protocol: 'https' or 'ssh'
-            token: Optional PAT for HTTPS authentication
+            token: Optional PAT for HTTPS authentication (embedded in URL)
+                If None and SYSTEM_ACCESSTOKEN is set, URL is built without token
+                (authentication handled via git http.extraheader)
         
         Returns: Full URL string
         """
@@ -273,6 +275,60 @@ class GitPM:
             if token:
                 return "https://{}@dev.azure.com/{}/{}/_git/{}".format(token, org, project_encoded, repo)
             return "https://dev.azure.com/{}/{}/_git/{}".format(org, project_encoded, repo)
+
+    def _configure_azure_devops_auth(self):
+        """
+        Configure git authentication for Azure DevOps using SYSTEM_ACCESSTOKEN.
+        
+        This sets up git's http.extraheader to use bearer token authentication,
+        which is the recommended approach for Azure DevOps pipelines as it:
+        - Keeps tokens out of URLs and logs
+        - Works with System.AccessToken in Azure Pipelines
+        - Supports scoped access tokens
+        
+        Call this method before any git operations when SYSTEM_ACCESSTOKEN is set.
+        
+        Returns: True if auth was configured, False otherwise
+        """
+        system_token = os.getenv("SYSTEM_ACCESSTOKEN")
+        
+        if not system_token:
+            return False
+        
+        # Configure git to use bearer token for Azure DevOps
+        # This applies to all dev.azure.com URLs
+        try:
+            # Set the authorization header for Azure DevOps
+            auth_header = "AUTHORIZATION: bearer {}".format(system_token)
+            
+            subprocess.run(
+                ["git", "config", "--global", "http.https://dev.azure.com/.extraheader", auth_header],
+                check=True,
+                capture_output=True
+            )
+            
+            print("  ✓ Configured Azure DevOps bearer token authentication")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print("  ⚠ Failed to configure Azure DevOps authentication: {}".format(e))
+            return False
+
+
+    def _cleanup_azure_devops_auth(self):
+        """
+        Remove git authentication configuration for Azure DevOps.
+        
+        Call this after git operations to clean up the global config.
+        This is optional but recommended for security in shared environments.
+        """
+        try:
+            subprocess.run(
+                ["git", "config", "--global", "--unset", "http.https://dev.azure.com/.extraheader"],
+                capture_output=True
+            )
+        except subprocess.CalledProcessError:
+            pass  # Ignore errors (config may not exist)
 
     def normalize_repo_url(self, repo):
         """Convert repository identifier to full URL"""
@@ -307,12 +363,22 @@ class GitPM:
             if "git_protocol" in self.config and "dev.azure.com" in self.config["git_protocol"]:
                 protocol = self.config["git_protocol"]["dev.azure.com"]
             
-            # Check for PAT - if present, always use HTTPS
-            token = self.config.get("azure_devops_pat") or os.getenv("GIT_PM_TOKEN_dev_azure_com")
-            if token:
-                protocol = 'https'
+            # Check for authentication tokens
+            # Priority: AZURE_DEVOPS_PAT (embedded in URL) > SYSTEM_ACCESSTOKEN (via http.extraheader)
+            pat_token = self.config.get("azure_devops_pat") or os.getenv("GIT_PM_TOKEN_dev_azure_com")
+            system_token = os.getenv("SYSTEM_ACCESSTOKEN")
             
-            return self._build_azure_devops_url(org, project, repo_name, protocol, token)
+            if pat_token:
+                # PAT token - embed in URL, force HTTPS
+                protocol = 'https'
+                return self._build_azure_devops_url(org, project, repo_name, protocol, pat_token)
+            elif system_token:
+                # System token - use http.extraheader (configured separately), force HTTPS
+                # Note: _configure_azure_devops_auth() must be called before git operations
+                protocol = 'https'
+                return self._build_azure_devops_url(org, project, repo_name, protocol, None)
+            
+            return self._build_azure_devops_url(org, project, repo_name, protocol, None)
         
         # Already a full URL (http/https/git@) - pass through for non-Azure DevOps
         if repo.startswith(("http://", "https://", "git@")):
@@ -353,7 +419,6 @@ class GitPM:
         # Fallback to HTTPS
         return "https://{}/{}.git".format(domain, path)
 
-    
     def _can_use_ssh(self, domain):
         """Test if SSH works for this domain"""
         try:
@@ -943,6 +1008,8 @@ class GitPM:
             manage_gitignore: Whether to update .gitignore
         """
         print("🚀 git-pm install")
+        
+        self._configure_azure_devops_auth()
         
         if not self.check_git():
             return 1

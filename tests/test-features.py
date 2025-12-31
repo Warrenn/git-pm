@@ -739,6 +739,255 @@ def test_azure_devops_url_roundtrip():
         return all_passed
 
 
+def test_azure_devops_system_accesstoken():
+    """Test normalize_repo_url uses HTTPS without embedded token when SYSTEM_ACCESSTOKEN is set"""
+    print("\n🧪 Test: Azure DevOps SYSTEM_ACCESSTOKEN Support")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_parse_azure_devops_url'):
+        print("  ⊘ Skipping (Azure DevOps URL handling not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest (no PAT configured)
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        Path("git-pm.config").write_text(json.dumps({}, indent=4))
+        
+        # Save original env
+        original_system_token = os.environ.get("SYSTEM_ACCESSTOKEN")
+        original_pat = os.environ.get("AZURE_DEVOPS_PAT")
+        
+        try:
+            # Clear PAT, set SYSTEM_ACCESSTOKEN
+            if "AZURE_DEVOPS_PAT" in os.environ:
+                del os.environ["AZURE_DEVOPS_PAT"]
+            os.environ["SYSTEM_ACCESSTOKEN"] = "test-bearer-token-xyz"
+            
+            gpm = GitPM()
+            
+            # Test: SSH input should become HTTPS without embedded token
+            test_url = "git@ssh.dev.azure.com:v3/bridgewaybentech/Platform%20Engineering/bbt-aws-iac"
+            result = gpm.normalize_repo_url(test_url)
+            
+            # Should be HTTPS
+            if not result.startswith("https://dev.azure.com/"):
+                print(f"  ❌ Should be HTTPS URL")
+                print(f"     Got: {result}")
+                return False
+            print(f"  ✅ Uses HTTPS protocol")
+            
+            # Should NOT have token embedded in URL (token goes in http.extraheader)
+            if "test-bearer-token" in result or "@dev.azure.com" in result:
+                print(f"  ❌ Token should NOT be in URL (should use http.extraheader)")
+                print(f"     Got: {result}")
+                return False
+            print(f"  ✅ Token not embedded in URL (will use http.extraheader)")
+            
+            # Should have proper /_git/ path
+            if "/_git/" not in result:
+                print(f"  ❌ Missing /_git/ in path")
+                print(f"     Got: {result}")
+                return False
+            print(f"  ✅ Correct /_git/ path format")
+            
+            # Verify expected URL format
+            expected = "https://dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/bbt-aws-iac"
+            if result == expected:
+                print(f"  ✅ URL format correct: {result}")
+            else:
+                print(f"  ❌ URL format mismatch")
+                print(f"     Expected: {expected}")
+                print(f"     Got:      {result}")
+                return False
+            
+            return True
+            
+        finally:
+            # Restore original env
+            if original_system_token is not None:
+                os.environ["SYSTEM_ACCESSTOKEN"] = original_system_token
+            elif "SYSTEM_ACCESSTOKEN" in os.environ:
+                del os.environ["SYSTEM_ACCESSTOKEN"]
+            
+            if original_pat is not None:
+                os.environ["AZURE_DEVOPS_PAT"] = original_pat
+
+
+def test_azure_devops_configure_auth():
+    """Test _configure_azure_devops_auth sets up git http.extraheader"""
+    print("\n🧪 Test: Azure DevOps Configure Auth (http.extraheader)")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_configure_azure_devops_auth'):
+        print("  ⊘ Skipping (_configure_azure_devops_auth not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        
+        # Initialize git repo for config commands
+        subprocess.run(["git", "init"], capture_output=True)
+        
+        # Save original env and git config
+        original_token = os.environ.get("SYSTEM_ACCESSTOKEN")
+        
+        try:
+            # Test 1: No token set - should return False
+            if "SYSTEM_ACCESSTOKEN" in os.environ:
+                del os.environ["SYSTEM_ACCESSTOKEN"]
+            
+            gpm = GitPM()
+            result = gpm._configure_azure_devops_auth()
+            
+            if result == False:
+                print(f"  ✅ Returns False when SYSTEM_ACCESSTOKEN not set")
+            else:
+                print(f"  ❌ Should return False when no token")
+                return False
+            
+            # Test 2: Token set - should configure git and return True
+            os.environ["SYSTEM_ACCESSTOKEN"] = "test-token-12345"
+            
+            gpm = GitPM()
+            result = gpm._configure_azure_devops_auth()
+            
+            if result == True:
+                print(f"  ✅ Returns True when SYSTEM_ACCESSTOKEN is set")
+            else:
+                print(f"  ❌ Should return True when token is set")
+                return False
+            
+            # Verify git config was set
+            config_result = subprocess.run(
+                ["git", "config", "--global", "http.https://dev.azure.com/.extraheader"],
+                capture_output=True,
+                text=True
+            )
+            
+            if config_result.returncode == 0:
+                config_value = config_result.stdout.strip()
+                if "bearer test-token-12345" in config_value:
+                    print(f"  ✅ Git http.extraheader configured correctly")
+                else:
+                    print(f"  ❌ Git config value incorrect: {config_value}")
+                    return False
+            else:
+                print(f"  ❌ Git config not set")
+                return False
+            
+            # Test cleanup
+            if hasattr(gpm, '_cleanup_azure_devops_auth'):
+                gpm._cleanup_azure_devops_auth()
+                
+                # Verify config was removed
+                config_result = subprocess.run(
+                    ["git", "config", "--global", "http.https://dev.azure.com/.extraheader"],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if config_result.returncode != 0:
+                    print(f"  ✅ Cleanup removed git config")
+                else:
+                    print(f"  ⚠️  Cleanup didn't remove config (may need manual cleanup)")
+            
+            return True
+            
+        finally:
+            # Restore original env
+            if original_token is not None:
+                os.environ["SYSTEM_ACCESSTOKEN"] = original_token
+            elif "SYSTEM_ACCESSTOKEN" in os.environ:
+                del os.environ["SYSTEM_ACCESSTOKEN"]
+            
+            # Clean up git config
+            subprocess.run(
+                ["git", "config", "--global", "--unset", "http.https://dev.azure.com/.extraheader"],
+                capture_output=True
+            )
+
+
+def test_azure_devops_pat_priority_over_system_token():
+    """Test that AZURE_DEVOPS_PAT takes priority over SYSTEM_ACCESSTOKEN"""
+    print("\n🧪 Test: Azure DevOps PAT Priority over SYSTEM_ACCESSTOKEN")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_parse_azure_devops_url'):
+        print("  ⊘ Skipping (Azure DevOps URL handling not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest with PAT configured
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        Path("git-pm.config").write_text(json.dumps({"azure_devops_pat": "pat-token-abc"}, indent=4))
+        
+        # Save original env
+        original_system_token = os.environ.get("SYSTEM_ACCESSTOKEN")
+        
+        try:
+            # Set both tokens
+            os.environ["SYSTEM_ACCESSTOKEN"] = "system-token-xyz"
+            
+            gpm = GitPM()
+            
+            test_url = "dev.azure.com/myorg/MyProject/my-repo"
+            result = gpm.normalize_repo_url(test_url)
+            
+            # PAT should be embedded in URL (takes priority)
+            if "pat-token-abc@dev.azure.com" in result:
+                print(f"  ✅ PAT token embedded in URL (takes priority)")
+            else:
+                print(f"  ❌ PAT should be embedded in URL")
+                print(f"     Got: {result}")
+                return False
+            
+            # SYSTEM_ACCESSTOKEN should NOT be in URL
+            if "system-token-xyz" in result:
+                print(f"  ❌ SYSTEM_ACCESSTOKEN should not be in URL when PAT is set")
+                return False
+            print(f"  ✅ SYSTEM_ACCESSTOKEN not used when PAT is available")
+            
+            return True
+            
+        finally:
+            # Restore original env
+            if original_system_token is not None:
+                os.environ["SYSTEM_ACCESSTOKEN"] = original_system_token
+            elif "SYSTEM_ACCESSTOKEN" in os.environ:
+                del os.environ["SYSTEM_ACCESSTOKEN"]
+
+
 def main():
     """Run all tests"""
     print("=" * 60)
@@ -760,6 +1009,10 @@ def main():
         ("ADO Normalize with PAT", test_azure_devops_normalize_with_pat),
         ("ADO Normalize with Protocol", test_azure_devops_normalize_with_protocol_config),
         ("ADO URL Roundtrip", test_azure_devops_url_roundtrip),
+        # SYSTEM_ACCESSTOKEN / bearer token tests
+        ("ADO SYSTEM_ACCESSTOKEN", test_azure_devops_system_accesstoken),
+        ("ADO Configure Auth", test_azure_devops_configure_auth),
+        ("ADO PAT Priority", test_azure_devops_pat_priority_over_system_token),
     ]
     
     passed = 0
