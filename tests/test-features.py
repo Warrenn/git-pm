@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive test suite for git-pm features
-Tests: config merging, dependency resolution, local overrides, symlinks
+Tests: config merging, dependency resolution, local overrides, symlinks, Azure DevOps URLs
 
 LOCATION: ./tests/test_features.py
 """
@@ -13,6 +13,8 @@ import shutil
 from pathlib import Path
 import json
 import subprocess
+import re
+import urllib.parse
 
 # Get the repository root (parent of tests directory)
 REPO_ROOT = Path(__file__).parent.parent.resolve()
@@ -38,6 +40,14 @@ def run_command(cmd, cwd=None):
 def setup_test_environment(test_dir):
     """Copy git-pm.py to test directory"""
     shutil.copy(GIT_PM_SCRIPT, test_dir / "git-pm.py")
+
+def get_gitpm_class():
+    """Import and return the GitPM class from git-pm.py"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("git_pm", GIT_PM_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.GitPM
 
 def test_config_merging_precedence():
     """Test 3-way config merging: defaults < user < project"""
@@ -354,6 +364,381 @@ def test_environment_file_generation():
             print("  ❌ Missing vars")
             return False
 
+
+# =============================================================================
+# Azure DevOps URL Handling Tests
+# =============================================================================
+
+def test_azure_devops_url_parsing():
+    """Test parsing of various Azure DevOps URL formats"""
+    print("\n🧪 Test: Azure DevOps URL Parsing")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_parse_azure_devops_url'):
+        print("  ⊘ Skipping (_parse_azure_devops_url not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        
+        gpm = GitPM()
+        
+        # Test cases: (input_url, expected_org, expected_project, expected_repo)
+        test_cases = [
+            # SSH format
+            (
+                "git@ssh.dev.azure.com:v3/bridgewaybentech/Platform%20Engineering/bbt-aws-iac",
+                "bridgewaybentech", "Platform Engineering", "bbt-aws-iac"
+            ),
+            # HTTPS format with user
+            (
+                "https://bridgewaybentech@dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/bbt-aws-iac",
+                "bridgewaybentech", "Platform Engineering", "bbt-aws-iac"
+            ),
+            # HTTPS format without user
+            (
+                "https://dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/shared-scripts",
+                "bridgewaybentech", "Platform Engineering", "shared-scripts"
+            ),
+            # Shorthand with /_git/
+            (
+                "dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/shared-scripts",
+                "bridgewaybentech", "Platform Engineering", "shared-scripts"
+            ),
+            # Shorthand without /_git/
+            (
+                "dev.azure.com/bridgewaybentech/Platform%20Engineering/shared-scripts",
+                "bridgewaybentech", "Platform Engineering", "shared-scripts"
+            ),
+            # Malformed hybrid format (dev.azure.com:v3/...)
+            (
+                "dev.azure.com:v3/bridgewaybentech/Platform%20Engineering/tf-modules-iac",
+                "bridgewaybentech", "Platform Engineering", "tf-modules-iac"
+            ),
+            # With .git suffix
+            (
+                "https://dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/shared-scripts.git",
+                "bridgewaybentech", "Platform Engineering", "shared-scripts"
+            ),
+        ]
+        
+        all_passed = True
+        for url, exp_org, exp_project, exp_repo in test_cases:
+            result = gpm._parse_azure_devops_url(url)
+            
+            if result is None:
+                print(f"  ❌ Failed to parse: {url}")
+                all_passed = False
+                continue
+            
+            org, project, repo = result
+            
+            if org == exp_org and project == exp_project and repo == exp_repo:
+                print(f"  ✅ Parsed: {url[:50]}...")
+            else:
+                print(f"  ❌ Mismatch for: {url}")
+                print(f"     Expected: org={exp_org}, project={exp_project}, repo={exp_repo}")
+                print(f"     Got:      org={org}, project={project}, repo={repo}")
+                all_passed = False
+        
+        # Test non-Azure DevOps URLs return None
+        non_ado_urls = [
+            "github.com/owner/repo",
+            "https://github.com/owner/repo.git",
+            "git@github.com:owner/repo.git",
+            "gitlab.com/owner/repo",
+        ]
+        
+        for url in non_ado_urls:
+            result = gpm._parse_azure_devops_url(url)
+            if result is None:
+                print(f"  ✅ Correctly rejected non-ADO: {url}")
+            else:
+                print(f"  ❌ Should have rejected: {url}")
+                all_passed = False
+        
+        return all_passed
+
+
+def test_azure_devops_url_building():
+    """Test building Azure DevOps URLs in different protocols"""
+    print("\n🧪 Test: Azure DevOps URL Building")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_build_azure_devops_url'):
+        print("  ⊘ Skipping (_build_azure_devops_url not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        
+        gpm = GitPM()
+        
+        # Test SSH output
+        ssh_url = gpm._build_azure_devops_url(
+            "bridgewaybentech", "Platform Engineering", "shared-scripts", "ssh"
+        )
+        expected_ssh = "git@ssh.dev.azure.com:v3/bridgewaybentech/Platform Engineering/shared-scripts"
+        
+        if ssh_url == expected_ssh:
+            print(f"  ✅ SSH URL correct")
+        else:
+            print(f"  ❌ SSH URL mismatch")
+            print(f"     Expected: {expected_ssh}")
+            print(f"     Got:      {ssh_url}")
+            return False
+        
+        # Test HTTPS output (no token)
+        https_url = gpm._build_azure_devops_url(
+            "bridgewaybentech", "Platform Engineering", "shared-scripts", "https"
+        )
+        expected_https = "https://dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/shared-scripts"
+        
+        if https_url == expected_https:
+            print(f"  ✅ HTTPS URL correct")
+        else:
+            print(f"  ❌ HTTPS URL mismatch")
+            print(f"     Expected: {expected_https}")
+            print(f"     Got:      {https_url}")
+            return False
+        
+        # Test HTTPS output (with token)
+        https_token_url = gpm._build_azure_devops_url(
+            "bridgewaybentech", "Platform Engineering", "shared-scripts", "https", "MY_PAT_TOKEN"
+        )
+        expected_https_token = "https://MY_PAT_TOKEN@dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/shared-scripts"
+        
+        if https_token_url == expected_https_token:
+            print(f"  ✅ HTTPS+PAT URL correct")
+        else:
+            print(f"  ❌ HTTPS+PAT URL mismatch")
+            print(f"     Expected: {expected_https_token}")
+            print(f"     Got:      {https_token_url}")
+            return False
+        
+        return True
+
+
+def test_azure_devops_normalize_with_pat():
+    """Test normalize_repo_url uses HTTPS when PAT is configured"""
+    print("\n🧪 Test: Azure DevOps URL Normalization with PAT")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_parse_azure_devops_url'):
+        print("  ⊘ Skipping (Azure DevOps URL handling not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        
+        # Create project config with PAT
+        project_config = {"azure_devops_pat": "test-token-12345"}
+        Path("git-pm.config").write_text(json.dumps(project_config, indent=4))
+        
+        gpm = GitPM()
+        
+        # Test: SSH input should become HTTPS when PAT is present
+        test_urls = [
+            "git@ssh.dev.azure.com:v3/bridgewaybentech/Platform%20Engineering/bbt-aws-iac",
+            "dev.azure.com:v3/bridgewaybentech/Platform%20Engineering/tf-modules-iac",
+            "dev.azure.com/bridgewaybentech/Platform%20Engineering/shared-scripts",
+        ]
+        
+        all_passed = True
+        for url in test_urls:
+            result = gpm.normalize_repo_url(url)
+            
+            # Should be HTTPS with token
+            if result.startswith("https://test-token-12345@dev.azure.com/"):
+                print(f"  ✅ PAT applied: {url[:40]}...")
+            else:
+                print(f"  ❌ PAT not applied for: {url}")
+                print(f"     Got: {result}")
+                all_passed = False
+            
+            # Should have proper /_git/ path
+            if "/_git/" in result:
+                print(f"  ✅ Correct /_git/ path")
+            else:
+                print(f"  ❌ Missing /_git/ in path")
+                print(f"     Got: {result}")
+                all_passed = False
+            
+            # Should NOT have .git suffix (Azure DevOps doesn't need it)
+            if not result.endswith(".git"):
+                print(f"  ✅ No spurious .git suffix")
+            else:
+                print(f"  ❌ Spurious .git suffix present")
+                print(f"     Got: {result}")
+                all_passed = False
+        
+        return all_passed
+
+
+def test_azure_devops_normalize_with_protocol_config():
+    """Test normalize_repo_url respects git_protocol configuration"""
+    print("\n🧪 Test: Azure DevOps URL Normalization with Protocol Config")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the method exists
+    if not hasattr(GitPM, '_parse_azure_devops_url'):
+        print("  ⊘ Skipping (Azure DevOps URL handling not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        
+        # Test 1: HTTPS protocol config (no PAT) - HTTPS input should stay HTTPS
+        project_config = {"git_protocol": {"dev.azure.com": "https"}}
+        Path("git-pm.config").write_text(json.dumps(project_config, indent=4))
+        
+        gpm = GitPM()
+        
+        # SSH input with HTTPS config (no PAT) -> should become HTTPS without token
+        result = gpm.normalize_repo_url("git@ssh.dev.azure.com:v3/bridgewaybentech/Platform%20Engineering/bbt-aws-iac")
+        
+        if result.startswith("https://dev.azure.com/"):
+            print(f"  ✅ HTTPS protocol respected (no token)")
+        else:
+            print(f"  ❌ Protocol config not respected")
+            print(f"     Got: {result}")
+            return False
+        
+        # Test 2: SSH protocol config - HTTPS input should become SSH
+        project_config = {"git_protocol": {"dev.azure.com": "ssh"}}
+        Path("git-pm.config").write_text(json.dumps(project_config, indent=4))
+        
+        gpm = GitPM()
+        
+        result = gpm.normalize_repo_url("https://dev.azure.com/bridgewaybentech/Platform%20Engineering/_git/shared-scripts")
+        
+        if result.startswith("git@ssh.dev.azure.com:v3/"):
+            print(f"  ✅ SSH protocol respected")
+        else:
+            print(f"  ❌ SSH protocol config not respected")
+            print(f"     Got: {result}")
+            return False
+        
+        return True
+
+
+def test_azure_devops_url_roundtrip():
+    """Test that URLs can be parsed and rebuilt correctly (roundtrip)"""
+    print("\n🧪 Test: Azure DevOps URL Roundtrip")
+    
+    try:
+        GitPM = get_gitpm_class()
+    except Exception as e:
+        print(f"  ❌ Failed to import GitPM: {e}")
+        return False
+    
+    # Check if the methods exist
+    if not hasattr(GitPM, '_parse_azure_devops_url') or not hasattr(GitPM, '_build_azure_devops_url'):
+        print("  ⊘ Skipping (Azure DevOps URL methods not implemented)")
+        return True
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir) / "project"
+        project_dir.mkdir()
+        os.chdir(project_dir)
+        
+        # Create minimal manifest
+        Path("git-pm.json").write_text(json.dumps({"packages": {}}, indent=4))
+        
+        gpm = GitPM()
+        
+        # All these different input formats should produce equivalent outputs
+        input_urls = [
+            "git@ssh.dev.azure.com:v3/myorg/My%20Project/my-repo",
+            "https://dev.azure.com/myorg/My%20Project/_git/my-repo",
+            "https://user@dev.azure.com/myorg/My%20Project/_git/my-repo",
+            "dev.azure.com/myorg/My%20Project/_git/my-repo",
+            "dev.azure.com/myorg/My%20Project/my-repo",
+            "dev.azure.com:v3/myorg/My%20Project/my-repo",
+        ]
+        
+        expected_ssh = "git@ssh.dev.azure.com:v3/myorg/My Project/my-repo"
+        expected_https = "https://dev.azure.com/myorg/My%20Project/_git/my-repo"
+        
+        all_passed = True
+        for url in input_urls:
+            parsed = gpm._parse_azure_devops_url(url)
+            if parsed is None:
+                print(f"  ❌ Failed to parse: {url}")
+                all_passed = False
+                continue
+            
+            org, project, repo = parsed
+            
+            # All should parse to the same components
+            if org != "myorg" or project != "My Project" or repo != "my-repo":
+                print(f"  ❌ Parse mismatch for: {url}")
+                print(f"     Got: org={org}, project={project}, repo={repo}")
+                all_passed = False
+                continue
+            
+            # Rebuild in both protocols
+            ssh_rebuilt = gpm._build_azure_devops_url(org, project, repo, "ssh")
+            https_rebuilt = gpm._build_azure_devops_url(org, project, repo, "https")
+            
+            if ssh_rebuilt == expected_ssh and https_rebuilt == expected_https:
+                print(f"  ✅ Roundtrip OK: {url[:40]}...")
+            else:
+                print(f"  ❌ Rebuild mismatch for: {url}")
+                if ssh_rebuilt != expected_ssh:
+                    print(f"     SSH expected: {expected_ssh}")
+                    print(f"     SSH got:      {ssh_rebuilt}")
+                if https_rebuilt != expected_https:
+                    print(f"     HTTPS expected: {expected_https}")
+                    print(f"     HTTPS got:      {https_rebuilt}")
+                all_passed = False
+        
+        return all_passed
+
+
 def main():
     """Run all tests"""
     print("=" * 60)
@@ -369,6 +754,12 @@ def main():
         ("Dependency Resolution", test_dependency_resolution),
         (".gitignore Management", test_gitignore_management),
         ("Environment File", test_environment_file_generation),
+        # Azure DevOps URL handling tests
+        ("ADO URL Parsing", test_azure_devops_url_parsing),
+        ("ADO URL Building", test_azure_devops_url_building),
+        ("ADO Normalize with PAT", test_azure_devops_normalize_with_pat),
+        ("ADO Normalize with Protocol", test_azure_devops_normalize_with_protocol_config),
+        ("ADO URL Roundtrip", test_azure_devops_url_roundtrip),
     ]
     
     passed = 0
